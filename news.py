@@ -5,10 +5,10 @@ import xml.etree.ElementTree as ET
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-RSS_URL = "https://feeds.reuters.com/reuters/businessNews"
+RSS_URL = "https://feeds.bbci.co.uk/news/business/rss.xml"
 
 def get_news():
-    response = requests.get(RSS_URL)
+    response = requests.get(RSS_URL, timeout=10)
     root = ET.fromstring(response.content)
 
     items = root.findall(".//item")
