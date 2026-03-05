@@ -5,6 +5,9 @@ import requests
 import os
 from config import ALL_TICKERS
 
+from Scripts.macro_global import macro_global
+from Scripts.crypto_market import crypto_market
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
@@ -96,6 +99,11 @@ if __name__ == "__main__":
 
     df = get_data()
 
-    report = build_analysis(df)
+    report = ""
+
+    report += macro_global() + "\n\n"
+    report += crypto_market() + "\n\n"
+
+    report += build_analysis(df)
 
     send_telegram(report)
