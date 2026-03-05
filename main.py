@@ -13,7 +13,7 @@ def get_data():
 
     data = yf.download(
         ALL_TICKERS,
-        period="3mo",
+        period="6mo",
         interval="1d",
         auto_adjust=True,
         threads=True
