@@ -1,89 +1,36 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
 import requests
-import os
 
-TICKERS = [
-    "BTC-USD",
-    "ETH-USD",
-    "SOL-USD",
-    "BNB-USD",
-    "LINK-USD",
-    "UNI7083-USD"
-]
+def crypto_market():
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+    url = "https://api.coingecko.com/api/v3/global"
+    data = requests.get(url).json()
 
+    market_cap = data["data"]["total_market_cap"]["usd"]
+    btc_dominance = data["data"]["market_cap_percentage"]["btc"]
 
-def get_data():
+    btc = requests.get(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
+    ).json()
 
-    data = yf.download(
-        TICKERS,
-        period="3mo",
-        interval="1d",
-        auto_adjust=True,
-        threads=True
-    )
+    eth = requests.get(
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true"
+    ).json()
 
-    df = data["Close"]
+    btc_price = btc["bitcoin"]["usd"]
+    btc_change = btc["bitcoin"]["usd_24h_change"]
 
-    df = df.dropna(axis=1, how="all")
+    eth_price = eth["ethereum"]["usd"]
+    eth_change = eth["ethereum"]["usd_24h_change"]
 
-    return df
+    message = "₿ CRYPTO MARKET\n\n"
 
+    btc_emoji = "🟢" if btc_change > 0 else "🔴"
+    eth_emoji = "🟢" if eth_change > 0 else "🔴"
 
-def build_report(df):
+    message += f"BTC: ${btc_price:,.0f} ({btc_emoji} {btc_change:.2f}%)\n"
+    message += f"ETH: ${eth_price:,.0f} ({eth_emoji} {eth_change:.2f}%)\n\n"
 
-    today = df.iloc[-1]
-    yesterday = df.iloc[-2]
-    week = df.iloc[-7]
+    message += f"BTC Dominance: {btc_dominance:.2f}%\n"
+    message += f"Market Cap: ${market_cap/1e12:.2f}T\n"
 
-    daily = ((today / yesterday) - 1) * 100
-    weekly = ((today / week) - 1) * 100
-
-    vol = df.pct_change().rolling(21).std().iloc[-1] * np.sqrt(365) * 100
-
-    report = "🪙 CRYPTO MARKET REPORT\n\n"
-
-    for asset in df.columns:
-
-        report += f"{asset}\n"
-        report += f"Preço: {today[asset]:.2f}\n"
-        report += f"24h: {daily[asset]:.2f}%\n"
-        report += f"7d: {weekly[asset]:.2f}%\n"
-        report += f"Vol: {vol[asset]:.2f}%\n\n"
-
-    report += "🚀 Maiores Altas (24h)\n"
-
-    for asset in daily.sort_values(ascending=False).head(5).index:
-        report += f"{asset}: {daily[asset]:.2f}%\n"
-
-    report += "\n🔻 Maiores Quedas (24h)\n"
-
-    for asset in daily.sort_values().head(5).index:
-        report += f"{asset}: {daily[asset]:.2f}%\n"
-
-    return report
-
-
-def send(msg):
-
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg
-    }
-
-    requests.post(url, data=payload)
-
-
-if __name__ == "__main__":
-
-    df = get_data()
-
-    report = build_report(df)
-
-    send(report)
+    return message
