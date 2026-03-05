@@ -19,7 +19,12 @@ def get_data():
         threads=True
     )
 
-    return data["Close"]
+    df = data["Close"]
+
+    # remove ativos sem dados
+    df = df.dropna(axis=1, how="all")
+
+    return df
 
 
 def build_analysis(df):
@@ -27,23 +32,33 @@ def build_analysis(df):
     today = df.iloc[-1]
     yesterday = df.iloc[-2]
 
-    df = df.dropna(axis=1, how="all")
-    
     daily_return = ((today / yesterday) - 1) * 100
-    weekly_return = ((today / df.iloc[-6]) - 1) * 100
 
-    vol = df.pct_change().rolling(21).std().iloc[-1] * np.sqrt(252) * 100
+    weekly_return = pd.Series(index=df.columns, dtype=float)
+
+    if len(df) > 6:
+        weekly_return = ((today / df.iloc[-6]) - 1) * 100
+
+    vol = df.pct_change().rolling(21).std() * np.sqrt(252) * 100
+    vol = vol.iloc[-1]
 
     report = "📊 VARISCO QUANT REPORT\n\n"
 
     report += "🌎 MERCADO\n\n"
 
-    for asset in today.index:
+    for asset in df.columns:
+
+        price = today.get(asset, np.nan)
+        d_ret = daily_return.get(asset, np.nan)
+        w_ret = weekly_return.get(asset, np.nan)
+        v = vol.get(asset, np.nan)
+
         report += f"{asset}\n"
-        report += f"Preço: {today[asset]:.2f}\n"
-        report += f"Dia: {daily_return[asset]:.2f}%\n"
-        report += f"Semana: {weekly_return[asset]:.2f}%\n"
-        report += f"Vol 21d: {vol[asset]:.2f}%\n\n"
+
+        report += f"Preço: {price:.2f}\n" if not np.isnan(price) else "Preço: -\n"
+        report += f"Dia: {d_ret:.2f}%\n" if not np.isnan(d_ret) else "Dia: -\n"
+        report += f"Semana: {w_ret:.2f}%\n" if not np.isnan(w_ret) else "Semana: -\n"
+        report += f"Vol 21d: {v:.2f}%\n\n" if not np.isnan(v) else "Vol 21d: -\n\n"
 
     report += "🔥 MAIORES ALTAS DO DIA\n"
 
@@ -57,8 +72,10 @@ def build_analysis(df):
 
     report += "\n⚡ MAIOR VOLATILIDADE (21d)\n"
 
-    for asset in vol.sort_values(ascending=False).head(5).index:
-        report += f"{asset}: {vol[asset]:.2f}%\n"
+    vol_clean = vol.dropna()
+
+    for asset in vol_clean.sort_values(ascending=False).head(5).index:
+        report += f"{asset}: {vol_clean[asset]:.2f}%\n"
 
     return report
 
