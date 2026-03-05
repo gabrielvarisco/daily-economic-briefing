@@ -19,4 +19,4 @@ def send_telegram(message):
     print("RESPONSE:", r.text)
 
 if __name__ == "__main__":
-    send_telegram("TESTE VARISCO QUANT")
+    send_telegram("🚀 TESTE VARISCO QUANT")
