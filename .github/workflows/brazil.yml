@@ -26,4 +26,4 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python scripts/brazil_market.py
+        run: python Scripts/brazil_market.py
