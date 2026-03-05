@@ -27,6 +27,8 @@ def build_analysis(df):
     today = df.iloc[-1]
     yesterday = df.iloc[-2]
 
+    df = df.dropna(axis=1, how="all")
+    
     daily_return = ((today / yesterday) - 1) * 100
     weekly_return = ((today / df.iloc[-6]) - 1) * 100
 
