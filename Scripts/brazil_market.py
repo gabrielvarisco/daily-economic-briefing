@@ -25,6 +25,16 @@ def send_telegram(message):
     requests.post(url, json=payload)
 
 
+def get_last_value(series):
+
+    value = series.iloc[-1]
+
+    if isinstance(value, pd.Series):
+        value = value.iloc[0]
+
+    return float(value)
+
+
 def analyze_stock(ticker):
 
     data = yf.download(ticker, period="3mo", interval="1d", progress=False)
@@ -34,20 +44,20 @@ def analyze_stock(ticker):
 
     close = data["Close"]
 
-    price = float(close.iloc[-1])
-    week = float(close.iloc[-5])
+    price = get_last_value(close)
+    week = get_last_value(close.iloc[-5:])
 
-    mm20 = float(close.rolling(20).mean().iloc[-1])
-    mm50 = float(close.rolling(50).mean().iloc[-1])
+    mm20 = get_last_value(close.rolling(20).mean())
+    mm50 = get_last_value(close.rolling(50).mean())
 
     trend = "Alta" if mm20 > mm50 else "Baixa"
 
     week_change = ((price - week) / week) * 100
 
     return {
-        "ticker": ticker.replace(".SA",""),
-        "price": round(price,2),
-        "week_change": round(week_change,2),
+        "ticker": ticker.replace(".SA", ""),
+        "price": round(price, 2),
+        "week_change": round(week_change, 2),
         "trend": trend
     }
 
@@ -58,8 +68,8 @@ def analyze_ibov():
 
     close = data["Close"]
 
-    price = float(close.iloc[-1])
-    mm200 = float(close.rolling(200).mean().iloc[-1])
+    price = get_last_value(close)
+    mm200 = get_last_value(close.rolling(200).mean())
 
     regime = "Bull" if price > mm200 else "Bear"
 
@@ -72,14 +82,14 @@ def analyze_dollar():
 
     close = data["Close"]
 
-    price = float(close.iloc[-1])
-    week = float(close.iloc[-5])
+    price = get_last_value(close)
+    week = get_last_value(close.iloc[-5:])
 
     change = ((price - week) / week) * 100
 
     trend = "Alta" if change > 0 else "Baixa"
 
-    return round(price,2), trend
+    return round(price, 2), trend
 
 
 def analyze_di():
@@ -88,14 +98,14 @@ def analyze_di():
 
     close = data["Close"]
 
-    price = float(close.iloc[-1])
-    week = float(close.iloc[-5])
+    price = get_last_value(close)
+    week = get_last_value(close.iloc[-5:])
 
     change = ((price - week) / week) * 100
 
     trend = "Alta" if change > 0 else "Baixa"
 
-    return round(price,2), trend
+    return round(price, 2), trend
 
 
 def brazil_market():
@@ -115,7 +125,7 @@ def brazil_market():
 
     di, di_trend = analyze_di()
 
-    report += f"Juros DI: {di}%\n"
+    report += f"Juros DI: {di}\n"
     report += f"Trend: {di_trend}\n\n"
 
     report += "Ações:\n"
