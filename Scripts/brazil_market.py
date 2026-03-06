@@ -21,6 +21,8 @@ def calculate_volatility(df):
 
 def analyze_ticker(ticker):
 
+    print(f"Analyzing {ticker}")
+
     df = yf.download(
         ticker,
         period="3mo",
@@ -29,6 +31,7 @@ def analyze_ticker(ticker):
     )
 
     if df.empty or len(df) < 50:
+        print(f"No data for {ticker}")
         return None
 
     price = df["Close"].iloc[-1]
@@ -74,12 +77,16 @@ def brazil_market():
 
     report = "🇧🇷 BRAZIL STOCK MARKET\n\n"
 
+    valid = 0
+
     for ticker in BRAZIL_TICKERS:
 
         data = analyze_ticker(ticker)
 
         if data is None:
             continue
+
+        valid += 1
 
         report += (
             f"{data['ticker']}\n"
@@ -90,6 +97,9 @@ def brazil_market():
             f"Tendência: {data['trend']}\n\n"
         )
 
+    if valid == 0:
+        report += "Nenhum dado retornado pelos tickers."
+
     return report
 
 
@@ -98,6 +108,10 @@ def send_telegram(message):
     token = os.getenv("TELEGRAM_TOKEN")
     chat_id = os.getenv("CHAT_ID")
 
+    if not token or not chat_id:
+        print("ERRO: TELEGRAM_TOKEN ou CHAT_ID não encontrados.")
+        return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     payload = {
@@ -105,11 +119,22 @@ def send_telegram(message):
         "text": message
     }
 
-    requests.post(url, data=payload)
+    print("Sending message to Telegram...")
+
+    r = requests.post(url, data=payload, timeout=20)
+
+    print("Telegram response:", r.text)
 
 
 if __name__ == "__main__":
 
+    print("Starting Brazil Market script")
+
     report = brazil_market()
 
+    print("Generated report:")
+    print(report)
+
     send_telegram(report)
+
+    print("Script finished")
