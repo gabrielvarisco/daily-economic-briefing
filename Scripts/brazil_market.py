@@ -1,94 +1,85 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
-import os
 
-TICKERS = [
-    "PETR4.SA",
-    "VALE3.SA",
-    "ITUB4.SA",
-    "BBAS3.SA",
-    "ABEV3.SA",
-    "PRIO3.SA",
-    "CMIG4.SA",
-    "CSAN3.SA",
-    "ITSA4.SA",
-    "SAPR4.SA",
-    "SIMH3.SA",
-    "KLBN4.SA",
-    "RAPT4.SA",
-    "USDBRL=X",
-]
-
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+from tickers.brazil_stocks import BRAZIL_TICKERS
 
 
-def get_data():
+def calculate_volatility(df):
+    returns = df["Close"].pct_change()
+    vol = returns.rolling(21).std() * np.sqrt(252)
+    return vol.iloc[-1]
 
-    data = yf.download(
-        TICKERS,
-        period="6mo",
+
+def analyze_ticker(ticker):
+
+    df = yf.download(
+        ticker,
+        period="3mo",
         interval="1d",
-        auto_adjust=True,
-        threads=True
+        progress=False
     )
 
-    df = data["Close"]
+    if df.empty:
+        return None
 
-    df = df.dropna(axis=1, how="all")
+    price = df["Close"].iloc[-1]
 
-    return df
+    daily_return = (
+        df["Close"].iloc[-1] /
+        df["Close"].iloc[-2] - 1
+    ) * 100
 
+    weekly_return = (
+        df["Close"].iloc[-1] /
+        df["Close"].iloc[-6] - 1
+    ) * 100
 
-def build_report(df):
+    vol = calculate_volatility(df)
 
-    today = df.iloc[-1]
-    yesterday = df.iloc[-2]
+    df["MM20"] = df["Close"].rolling(20).mean()
+    df["MM50"] = df["Close"].rolling(50).mean()
 
-    daily = ((today / yesterday) - 1) * 100
+    mm20 = df["MM20"].iloc[-1]
+    mm50 = df["MM50"].iloc[-1]
 
-    report = "🇧🇷 B3 MARKET REPORT\n\n"
+    if price > mm20 and price > mm50:
+        trend = "Alta forte (acima MM20 e MM50)"
 
-    for asset in df.columns:
+    elif price > mm50:
+        trend = "Alta moderada (acima MM50)"
 
-        price = today[asset]
-        ret = daily[asset]
+    else:
+        trend = "Baixa / correção"
 
-        report += f"{asset}\n"
-        report += f"Preço: {price:.2f}\n"
-        report += f"Dia: {ret:.2f}%\n\n"
-
-    report += "🔥 Maiores Altas\n"
-
-    for asset in daily.sort_values(ascending=False).head(5).index:
-        report += f"{asset}: {daily[asset]:.2f}%\n"
-
-    report += "\n🔻 Maiores Quedas\n"
-
-    for asset in daily.sort_values().head(5).index:
-        report += f"{asset}: {daily[asset]:.2f}%\n"
-
-    return report
-
-
-def send(msg):
-
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg
+    return {
+        "ticker": ticker,
+        "price": price,
+        "daily": daily_return,
+        "weekly": weekly_return,
+        "vol": vol,
+        "trend": trend
     }
 
-    requests.post(url, data=payload)
 
+def brazil_market():
 
-if __name__ == "__main__":
+    report = "🇧🇷 Brazil Stock Market\n\n"
 
-    df = get_data()
+    for ticker in BRAZIL_TICKERS:
 
-    report = build_report(df)
+        data = analyze_ticker(ticker)
 
-    send(report)
+        if data is None:
+            continue
+
+        report += (
+            f"{data['ticker']}\n"
+            f"Preço: {data['price']:.2f}\n"
+            f"Dia: {data['daily']:.2f}%\n"
+            f"Semana: {data['weekly']:.2f}%\n"
+            f"Vol 21d: {data['vol']:.2%}\n"
+            f"Tendência: {data['trend']}\n\n"
+        )
+
+    return report
