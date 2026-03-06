@@ -11,9 +11,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from tickers.brazil_stocks import BRAZIL_TICKERS
 
 
-def calculate_volatility(df):
+def calculate_volatility(close):
 
-    returns = df["Close"].pct_change()
+    returns = close.pct_change()
     vol = returns.rolling(21).std() * np.sqrt(252)
 
     return vol.iloc[-1]
@@ -34,25 +34,23 @@ def analyze_ticker(ticker):
         print(f"No data for {ticker}")
         return None
 
-    price = df["Close"].iloc[-1]
+    # força Close a ser série simples
+    close = df["Close"].squeeze()
+
+    price = float(close.iloc[-1])
 
     daily_return = (
-        df["Close"].iloc[-1] /
-        df["Close"].iloc[-2] - 1
+        close.iloc[-1] / close.iloc[-2] - 1
     ) * 100
 
     weekly_return = (
-        df["Close"].iloc[-1] /
-        df["Close"].iloc[-6] - 1
+        close.iloc[-1] / close.iloc[-6] - 1
     ) * 100
 
-    vol = calculate_volatility(df)
+    vol = calculate_volatility(close)
 
-    df["MM20"] = df["Close"].rolling(20).mean()
-    df["MM50"] = df["Close"].rolling(50).mean()
-
-    mm20 = df["MM20"].iloc[-1]
-    mm50 = df["MM50"].iloc[-1]
+    mm20 = close.rolling(20).mean().iloc[-1]
+    mm50 = close.rolling(50).mean().iloc[-1]
 
     if price > mm20 and price > mm50:
         trend = "Alta forte (acima MM20 e MM50)"
@@ -98,7 +96,7 @@ def brazil_market():
         )
 
     if valid == 0:
-        report += "Nenhum dado retornado pelos tickers."
+        report += "Nenhum dado retornado."
 
     return report
 
@@ -132,7 +130,6 @@ if __name__ == "__main__":
 
     report = brazil_market()
 
-    print("Generated report:")
     print(report)
 
     send_telegram(report)
