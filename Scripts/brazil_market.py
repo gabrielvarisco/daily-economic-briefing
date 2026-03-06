@@ -1,18 +1,21 @@
-import sys
-import os
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import requests
+import os
+import sys
 
+# permite importar arquivos da raiz do projeto
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tickers.brazil_stocks import BRAZIL_TICKERS
 
 
 def calculate_volatility(df):
+
     returns = df["Close"].pct_change()
     vol = returns.rolling(21).std() * np.sqrt(252)
+
     return vol.iloc[-1]
 
 
@@ -25,7 +28,7 @@ def analyze_ticker(ticker):
         progress=False
     )
 
-    if df.empty:
+    if df.empty or len(df) < 50:
         return None
 
     price = df["Close"].iloc[-1]
@@ -69,7 +72,7 @@ def analyze_ticker(ticker):
 
 def brazil_market():
 
-    report = "🇧🇷 Brazil Stock Market\n\n"
+    report = "🇧🇷 BRAZIL STOCK MARKET\n\n"
 
     for ticker in BRAZIL_TICKERS:
 
@@ -88,3 +91,25 @@ def brazil_market():
         )
 
     return report
+
+
+def send_telegram(message):
+
+    token = os.getenv("TELEGRAM_TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    payload = {
+        "chat_id": chat_id,
+        "text": message
+    }
+
+    requests.post(url, data=payload)
+
+
+if __name__ == "__main__":
+
+    report = brazil_market()
+
+    send_telegram(report)
