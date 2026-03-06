@@ -3,10 +3,13 @@ import pandas as pd
 import numpy as np
 import requests
 import os
+
 from config import ALL_TICKERS
 
 from Scripts.macro_global import macro_global
 from Scripts.crypto_market import crypto_market
+from Scripts.brazil_market import brazil_market
+
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -47,7 +50,7 @@ def build_analysis(df):
 
     report = "📊 VARISCO QUANT REPORT\n\n"
 
-    report += "🌎 MERCADO\n\n"
+    report += "🌎 MERCADO GLOBAL\n\n"
 
     for asset in df.columns:
 
@@ -101,9 +104,16 @@ if __name__ == "__main__":
 
     report = ""
 
+    # 🌎 Macro Global
     report += macro_global() + "\n\n"
+
+    # ₿ Crypto
     report += crypto_market() + "\n\n"
 
+    # 🇧🇷 Brasil
+    report += brazil_market() + "\n\n"
+
+    # 📊 Quant Global
     report += build_analysis(df)
 
     send_telegram(report)
