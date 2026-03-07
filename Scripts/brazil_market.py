@@ -14,11 +14,16 @@ def send_telegram(message):
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("CHAT_ID")
 
+    if not token or not chat_id:
+        print("Telegram token ou chat id não encontrado")
+        return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     payload = {
         "chat_id": chat_id,
-        "text": message
+        "text": message,
+        "parse_mode": "HTML"
     }
 
     requests.post(url, json=payload)
@@ -34,29 +39,46 @@ def get_last_value(series):
     return float(value)
 
 
-# ----------------------------
-# STOCK ANALYSIS
-# ----------------------------
+def download_data(ticker, period="3mo"):
+
+    try:
+
+        data = yf.download(
+            ticker,
+            period=period,
+            interval="1d",
+            progress=False,
+            auto_adjust=True
+        )
+
+        if data.empty:
+            return None
+
+        return data
+
+    except Exception as e:
+
+        print(f"Erro baixando {ticker}: {e}")
+        return None
+
 
 def analyze_stock(ticker):
 
-    data = yf.download(ticker, period="3mo", interval="1d", progress=False)
+    data = download_data(ticker, "3mo")
 
-    if data.empty:
+    if data is None:
         return None
 
     close = data["Close"]
 
     price = get_last_value(close)
-    yesterday = get_last_value(close.iloc[-2])
 
-    daily_change = ((price - yesterday) / yesterday) * 100
+    prev = get_last_value(close.iloc[-2:])
 
-    mm20 = close.rolling(20).mean().iloc[-1]
-    mm50 = close.rolling(50).mean().iloc[-1]
+    change = ((price - prev) / prev) * 100
 
-    mm20 = float(mm20)
-    mm50 = float(mm50)
+    mm20 = get_last_value(close.rolling(20).mean())
+    mm50 = get_last_value(close.rolling(50).mean())
 
     mm20_signal = "↑" if price > mm20 else "↓"
     mm50_signal = "↑" if price > mm50 else "↓"
@@ -64,112 +86,92 @@ def analyze_stock(ticker):
     return {
         "ticker": ticker.replace(".SA", ""),
         "price": round(price, 2),
-        "daily_change": round(daily_change, 2),
+        "change": round(change, 2),
         "mm20": mm20_signal,
         "mm50": mm50_signal
     }
 
 
-# ----------------------------
-# IBOV
-# ----------------------------
-
 def analyze_ibov():
 
-    data = yf.download(BRAZIL_INDEX, period="1y", interval="1d", progress=False)
+    data = download_data(BRAZIL_INDEX, "1y")
 
     close = data["Close"]
 
     price = get_last_value(close)
 
-    mm200 = close.rolling(200).mean().iloc[-1]
-    mm200 = float(mm200)
+    mm200_series = close.rolling(200).mean()
+
+    mm200 = get_last_value(mm200_series)
 
     regime = "Bull" if price > mm200 else "Bear"
 
-    return round(price, 0), round(mm200, 0), regime
+    return price, mm200, regime
 
-
-# ----------------------------
-# DOLLAR
-# ----------------------------
 
 def analyze_dollar():
 
-    data = yf.download(BRAZIL_DOLLAR, period="3mo", interval="1d", progress=False)
+    data = download_data(BRAZIL_DOLLAR, "3mo")
 
     close = data["Close"]
 
     price = get_last_value(close)
 
-    mm20 = close.rolling(20).mean().iloc[-1]
-    mm50 = close.rolling(50).mean().iloc[-1]
-
-    mm20 = float(mm20)
-    mm50 = float(mm50)
+    mm20 = get_last_value(close.rolling(20).mean())
+    mm50 = get_last_value(close.rolling(50).mean())
 
     if price > mm20 and price > mm50:
         trend = "Alta forte"
+
     elif price > mm20:
         trend = "Alta"
+
     elif price < mm20 and price < mm50:
         trend = "Baixa forte"
+
     else:
-        trend = "Neutro"
+        trend = "Neutra"
 
     return round(price, 2), round(mm20, 2), round(mm50, 2), trend
 
 
-# ----------------------------
-# DI FUTURES
-# ----------------------------
-
 def analyze_di():
 
-    data = yf.download(BRAZIL_DI, period="1mo", interval="1d", progress=False)
+    data = download_data(BRAZIL_DI, "3mo")
 
     close = data["Close"]
 
     price = get_last_value(close)
-    yesterday = get_last_value(close.iloc[-2])
 
-    change = ((price - yesterday) / yesterday) * 100
+    mm20 = get_last_value(close.rolling(20).mean())
 
-    trend = "Alta" if change > 0 else "Baixa"
+    trend = "Alta" if price > mm20 else "Baixa"
 
     return round(price, 2), trend
 
 
-# ----------------------------
-# MAIN REPORT
-# ----------------------------
-
 def brazil_market():
 
-    report = "🇧🇷 Brazil Market\n\n"
+    report = "🇧🇷 <b>Brazil Market</b>\n\n"
 
-    # IBOV
     ibov, mm200, regime = analyze_ibov()
 
-    report += f"IBOV: {ibov}\n"
-    report += f"MM200: {mm200}\n"
+    report += f"IBOV: {round(ibov,0)}\n"
+    report += f"MM200: {round(mm200,0)}\n"
     report += f"Regime: {regime}\n\n"
 
-    # DOLLAR
-    dollar, d_mm20, d_mm50, dollar_trend = analyze_dollar()
+    dollar, mm20_d, mm50_d, dollar_trend = analyze_dollar()
 
     report += f"Dólar: {dollar}\n"
-    report += f"MM20: {d_mm20}\n"
-    report += f"MM50: {d_mm50}\n"
+    report += f"MM20: {mm20_d}\n"
+    report += f"MM50: {mm50_d}\n"
     report += f"Trend: {dollar_trend}\n\n"
 
-    # DI
     di, di_trend = analyze_di()
 
     report += f"Juros DI: {di}\n"
     report += f"Trend: {di_trend}\n\n"
 
-    # STOCKS
     report += "Ações:\n"
 
     for ticker in BRAZIL_TICKERS:
@@ -181,17 +183,13 @@ def brazil_market():
             report += (
                 f"{stock['ticker']} "
                 f"{stock['price']} "
-                f"{stock['daily_change']}% "
+                f"{stock['change']}% "
                 f"MM20{stock['mm20']} "
                 f"MM50{stock['mm50']}\n"
             )
 
     return report
 
-
-# ----------------------------
-# RUN
-# ----------------------------
 
 if __name__ == "__main__":
 
