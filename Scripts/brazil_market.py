@@ -3,6 +3,7 @@ import sys
 import requests
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -35,6 +36,17 @@ def get_last_value(series):
     return float(value)
 
 
+def calculate_volatility(close):
+
+    returns = close.pct_change()
+
+    vol = returns.rolling(21).std() * np.sqrt(252)
+
+    vol_value = get_last_value(vol)
+
+    return round(vol_value * 100, 2)
+
+
 def analyze_stock(ticker):
 
     data = yf.download(ticker, period="3mo", interval="1d", progress=False)
@@ -49,6 +61,8 @@ def analyze_stock(ticker):
 
     daily_change = ((price - prev) / prev) * 100
 
+    vol = calculate_volatility(close)
+
     mm20 = get_last_value(close.rolling(20).mean())
     mm50 = get_last_value(close.rolling(50).mean())
 
@@ -59,6 +73,7 @@ def analyze_stock(ticker):
         "ticker": ticker.replace(".SA", ""),
         "price": round(price, 2),
         "daily_change": round(daily_change, 2),
+        "vol": vol,
         "mm20": mm20_status,
         "mm50": mm50_status
     }
@@ -75,6 +90,8 @@ def analyze_ibov():
 
     daily_change = ((price - prev) / prev) * 100
 
+    vol = calculate_volatility(close)
+
     mm20 = get_last_value(close.rolling(20).mean())
     mm50 = get_last_value(close.rolling(50).mean())
     mm200 = get_last_value(close.rolling(200).mean())
@@ -83,7 +100,7 @@ def analyze_ibov():
     mm50_status = "↑" if price > mm50 else "↓"
     mm200_status = "↑" if price > mm200 else "↓"
 
-    return round(price, 0), round(daily_change, 2), mm20_status, mm50_status, mm200_status
+    return round(price, 0), round(daily_change, 2), vol, mm20_status, mm50_status, mm200_status
 
 
 def analyze_dollar():
@@ -97,26 +114,28 @@ def analyze_dollar():
 
     daily_change = ((price - prev) / prev) * 100
 
+    vol = calculate_volatility(close)
+
     mm20 = get_last_value(close.rolling(20).mean())
     mm50 = get_last_value(close.rolling(50).mean())
 
     mm20_status = "↑" if price > mm20 else "↓"
     mm50_status = "↑" if price > mm50 else "↓"
 
-    return round(price, 2), round(daily_change, 2), mm20_status, mm50_status
+    return round(price, 2), round(daily_change, 2), vol, mm20_status, mm50_status
 
 
 def brazil_market():
 
     report = "🇧🇷 <b>Brazil Market</b>\n\n"
 
-    ibov, ibov_change, mm20, mm50, mm200 = analyze_ibov()
+    ibov, ibov_change, ibov_vol, mm20, mm50, mm200 = analyze_ibov()
 
-    report += f"IBOV {ibov} {ibov_change}% MM20{mm20} MM50{mm50} MM200{mm200}\n\n"
+    report += f"IBOV {ibov} {ibov_change}% Vol{ibov_vol}% MM20{mm20} MM50{mm50} MM200{mm200}\n\n"
 
-    dollar, dollar_change, mm20, mm50 = analyze_dollar()
+    dollar, dollar_change, dollar_vol, mm20, mm50 = analyze_dollar()
 
-    report += f"Dólar {dollar} {dollar_change}% MM20{mm20} MM50{mm50}\n\n"
+    report += f"Dólar {dollar} {dollar_change}% Vol{dollar_vol}% MM20{mm20} MM50{mm50}\n\n"
 
     report += "Ações:\n"
 
@@ -130,6 +149,7 @@ def brazil_market():
                 f"{stock['ticker']} "
                 f"{stock['price']} "
                 f"{stock['daily_change']}% "
+                f"Vol{stock['vol']}% "
                 f"MM20{stock['mm20']} "
                 f"MM50{stock['mm50']}\n"
             )
