@@ -39,20 +39,21 @@ def analyze_stock(ticker):
 
     data = yf.download(ticker, period="3mo", interval="1d", progress=False)
 
-    if data.empty:
+    if data.empty or len(data) < 20:
         return None
 
     close = data["Close"]
 
     price = get_last_value(close)
-    week = get_last_value(close.iloc[-5:])
+
+    week_price = get_last_value(close.iloc[-5])
 
     mm20 = get_last_value(close.rolling(20).mean())
     mm50 = get_last_value(close.rolling(50).mean())
 
     trend = "Alta" if mm20 > mm50 else "Baixa"
 
-    week_change = ((price - week) / week) * 100
+    week_change = ((price - week_price) / week_price) * 100
 
     return {
         "ticker": ticker.replace(".SA", ""),
@@ -69,6 +70,7 @@ def analyze_ibov():
     close = data["Close"]
 
     price = get_last_value(close)
+
     mm200 = get_last_value(close.rolling(200).mean())
 
     regime = "Bull" if price > mm200 else "Bear"
@@ -83,9 +85,10 @@ def analyze_dollar():
     close = data["Close"]
 
     price = get_last_value(close)
-    week = get_last_value(close.iloc[-5:])
 
-    change = ((price - week) / week) * 100
+    week_price = get_last_value(close.iloc[-5])
+
+    change = ((price - week_price) / week_price) * 100
 
     trend = "Alta" if change > 0 else "Baixa"
 
@@ -96,12 +99,16 @@ def analyze_di():
 
     data = yf.download(BRAZIL_DI, period="1mo", interval="1d", progress=False)
 
+    if data.empty:
+        return None, "N/A"
+
     close = data["Close"]
 
     price = get_last_value(close)
-    week = get_last_value(close.iloc[-5:])
 
-    change = ((price - week) / week) * 100
+    week_price = get_last_value(close.iloc[-5])
+
+    change = ((price - week_price) / week_price) * 100
 
     trend = "Alta" if change > 0 else "Baixa"
 
@@ -125,8 +132,9 @@ def brazil_market():
 
     di, di_trend = analyze_di()
 
-    report += f"Juros DI: {di}\n"
-    report += f"Trend: {di_trend}\n\n"
+    if di:
+        report += f"Juros DI: {di}\n"
+        report += f"Trend: {di_trend}\n\n"
 
     report += "Ações:\n"
 
