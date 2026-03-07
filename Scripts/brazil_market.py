@@ -137,7 +137,7 @@ def brazil_market():
     dollar, dollar_change, dollar_vol, mm20, mm50 = analyze_dollar()
 
     report += f"Dólar {dollar} {dollar_change}%\n"
-    report += f"Vol{dollar_vol}% MM20{mm20} MM50{mm50}\n\n"
+    report += f"Vol{dollar_vol}% MM20{mm20} MM50{mm50}\n\n\n"
 
     report += "Ações:\n"
 
