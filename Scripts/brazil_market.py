@@ -45,7 +45,6 @@ def analyze_stock(ticker):
     close = data["Close"]
 
     price = get_last_value(close)
-
     prev = get_last_value(close.iloc[-2])
 
     daily_change = ((price - prev) / prev) * 100
@@ -72,13 +71,13 @@ def analyze_ibov():
     close = data["Close"]
 
     price = get_last_value(close)
+    prev = get_last_value(close.iloc[-2])
 
-    mm200_series = close.rolling(200).mean()
-    mm200 = get_last_value(mm200_series)
+    daily_change = ((price - prev) / prev) * 100
 
-    regime = "Bull (IBOV > MM200)" if price > mm200 else "Bear (IBOV < MM200)"
+    mm200 = get_last_value(close.rolling(200).mean())
 
-    return round(price, 0), round(mm200, 0), regime
+    return round(price, 0), round(daily_change, 2), round(mm200, 0)
 
 
 def analyze_dollar():
@@ -88,40 +87,30 @@ def analyze_dollar():
     close = data["Close"]
 
     price = get_last_value(close)
+    prev = get_last_value(close.iloc[-2])
+
+    daily_change = ((price - prev) / prev) * 100
 
     mm20 = get_last_value(close.rolling(20).mean())
     mm50 = get_last_value(close.rolling(50).mean())
 
-    if price > mm20 and price > mm50:
-        trend = "Alta forte (acima MM20 e MM50)"
-    elif price > mm20:
-        trend = "Alta (acima MM20)"
-    elif price < mm20 and price < mm50:
-        trend = "Baixa forte (abaixo MM20 e MM50)"
-    elif price < mm20:
-        trend = "Baixa (abaixo MM20)"
-    else:
-        trend = "Neutro"
+    mm20_status = "↑" if price > mm20 else "↓"
+    mm50_status = "↑" if price > mm50 else "↓"
 
-    return round(price, 2), round(mm20, 2), round(mm50, 2), trend
+    return round(price, 2), round(daily_change, 2), mm20_status, mm50_status
 
 
 def brazil_market():
 
     report = "🇧🇷 <b>Brazil Market</b>\n\n"
 
-    ibov, mm200, regime = analyze_ibov()
+    ibov, ibov_change, mm200 = analyze_ibov()
 
-    report += f"IBOV: {ibov}\n"
-    report += f"MM200: {mm200}\n"
-    report += f"Regime: {regime}\n\n"
+    report += f"IBOV {ibov} {ibov_change}% MM200 {mm200}\n\n"
 
-    dollar, mm20, mm50, trend = analyze_dollar()
+    dollar, dollar_change, mm20, mm50 = analyze_dollar()
 
-    report += f"Dólar: {dollar}\n"
-    report += f"MM20: {mm20}\n"
-    report += f"MM50: {mm50}\n"
-    report += f"Trend: {trend}\n\n"
+    report += f"Dólar {dollar} {dollar_change}% MM20{mm20} MM50{mm50}\n\n"
 
     report += "Ações:\n"
 
