@@ -149,7 +149,7 @@ def brazil_market():
 
             report += (
                 f"{stock['ticker']} {stock['price']} {stock['daily_change']}%\n"
-                f"Vol{stock['vol']}% MM20{stock['mm20']} MM50{stock['mm50']}\n"
+                f"Vol{stock['vol']}% MM20{stock['mm20']} MM50{stock['mm50']}\n\n"
             )
 
     return report
