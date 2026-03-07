@@ -75,9 +75,15 @@ def analyze_ibov():
 
     daily_change = ((price - prev) / prev) * 100
 
+    mm20 = get_last_value(close.rolling(20).mean())
+    mm50 = get_last_value(close.rolling(50).mean())
     mm200 = get_last_value(close.rolling(200).mean())
 
-    return round(price, 0), round(daily_change, 2), round(mm200, 0)
+    mm20_status = "↑" if price > mm20 else "↓"
+    mm50_status = "↑" if price > mm50 else "↓"
+    mm200_status = "↑" if price > mm200 else "↓"
+
+    return round(price, 0), round(daily_change, 2), mm20_status, mm50_status, mm200_status
 
 
 def analyze_dollar():
@@ -104,9 +110,9 @@ def brazil_market():
 
     report = "🇧🇷 <b>Brazil Market</b>\n\n"
 
-    ibov, ibov_change, mm200 = analyze_ibov()
+    ibov, ibov_change, mm20, mm50, mm200 = analyze_ibov()
 
-    report += f"IBOV {ibov} {ibov_change}% MM200 {mm200}\n\n"
+    report += f"IBOV {ibov} {ibov_change}% MM20{mm20} MM50{mm50} MM200{mm200}\n\n"
 
     dollar, dollar_change, mm20, mm50 = analyze_dollar()
 
