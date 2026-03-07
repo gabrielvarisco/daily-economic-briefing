@@ -100,7 +100,7 @@ def analyze_ibov():
     mm50_status = "↑" if price > mm50 else "↓"
     mm200_status = "↑" if price > mm200 else "↓"
 
-    return round(price, 0), round(daily_change, 2), vol, mm20_status, mm50_status, mm200_status
+    return round(price, 1), round(daily_change, 2), vol, mm20_status, mm50_status, mm200_status
 
 
 def analyze_dollar():
@@ -131,11 +131,13 @@ def brazil_market():
 
     ibov, ibov_change, ibov_vol, mm20, mm50, mm200 = analyze_ibov()
 
-    report += f"IBOV {ibov} {ibov_change}% Vol{ibov_vol}% MM20{mm20} MM50{mm50} MM200{mm200}\n\n"
+    report += f"IBOV {ibov} {ibov_change}%\n"
+    report += f"Vol{ibov_vol}% MM20{mm20} MM50{mm50} MM200{mm200}\n\n"
 
     dollar, dollar_change, dollar_vol, mm20, mm50 = analyze_dollar()
 
-    report += f"Dólar {dollar} {dollar_change}% Vol{dollar_vol}% MM20{mm20} MM50{mm50}\n\n"
+    report += f"Dólar {dollar} {dollar_change}%\n"
+    report += f"Vol{dollar_vol}% MM20{mm20} MM50{mm50}\n\n"
 
     report += "Ações:\n"
 
@@ -146,12 +148,8 @@ def brazil_market():
         if stock:
 
             report += (
-                f"{stock['ticker']} "
-                f"{stock['price']} "
-                f"{stock['daily_change']}% "
-                f"Vol{stock['vol']}% "
-                f"MM20{stock['mm20']} "
-                f"MM50{stock['mm50']}\n"
+                f"{stock['ticker']} {stock['price']} {stock['daily_change']}%\n"
+                f"Vol{stock['vol']}% MM20{stock['mm20']} MM50{stock['mm50']}\n"
             )
 
     return report
