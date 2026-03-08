@@ -3,6 +3,7 @@ import requests
 
 from Scripts.brazil_market import brazil_market
 from Scripts.usa_market import usa_market
+from Scripts.news_market import news_market
 
 try:
     from Scripts.crypto_market import crypto_market
@@ -60,6 +61,8 @@ def build_full_report() -> str:
 
     if crypto_market:
         sections.append(_safe_section("Crypto Market", crypto_market))
+
+    sections.append(_safe_section("News Market", news_market))
 
     return "\n\n".join(section for section in sections if section.strip()).strip()
 
