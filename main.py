@@ -1,119 +1,74 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import requests
 import os
+import requests
 
-from config import ALL_TICKERS
-
-from Scripts.macro_global import macro_global
-from Scripts.crypto_market import crypto_market
 from Scripts.brazil_market import brazil_market
+from Scripts.usa_market import usa_market
+
+try:
+    from Scripts.crypto_market import crypto_market
+except ImportError:
+    crypto_market = None
+
+try:
+    from Scripts.macro_global import macro_global
+except ImportError:
+    macro_global = None
 
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+def send_telegram(message: str) -> None:
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("CHAT_ID")
 
+    if not token or not chat_id:
+        print("[main] TELEGRAM_TOKEN ou CHAT_ID não configurados.")
+        return
 
-def get_data():
-
-    data = yf.download(
-        ALL_TICKERS,
-        period="6mo",
-        interval="1d",
-        auto_adjust=True,
-        threads=True
-    )
-
-    df = data["Close"]
-
-    # remove ativos sem dados
-    df = df.dropna(axis=1, how="all")
-
-    return df
-
-
-def build_analysis(df):
-
-    today = df.iloc[-1]
-    yesterday = df.iloc[-2]
-
-    daily_return = ((today / yesterday) - 1) * 100
-
-    weekly_return = pd.Series(index=df.columns, dtype=float)
-
-    if len(df) > 6:
-        weekly_return = ((today / df.iloc[-6]) - 1) * 100
-
-    vol = df.pct_change().rolling(21).std() * np.sqrt(252) * 100
-    vol = vol.iloc[-1]
-
-    report = "📊 VARISCO QUANT REPORT\n\n"
-
-    report += "🌎 MERCADO GLOBAL\n\n"
-
-    for asset in df.columns:
-
-        price = today.get(asset, np.nan)
-        d_ret = daily_return.get(asset, np.nan)
-        w_ret = weekly_return.get(asset, np.nan)
-        v = vol.get(asset, np.nan)
-
-        report += f"{asset}\n"
-
-        report += f"Preço: {price:.2f}\n" if not np.isnan(price) else "Preço: -\n"
-        report += f"Dia: {d_ret:.2f}%\n" if not np.isnan(d_ret) else "Dia: -\n"
-        report += f"Semana: {w_ret:.2f}%\n" if not np.isnan(w_ret) else "Semana: -\n"
-        report += f"Vol 21d: {v:.2f}%\n\n" if not np.isnan(v) else "Vol 21d: -\n\n"
-
-    report += "🔥 MAIORES ALTAS DO DIA\n"
-
-    for asset in daily_return.sort_values(ascending=False).head(5).index:
-        report += f"{asset}: {daily_return[asset]:.2f}%\n"
-
-    report += "\n🔻 MAIORES QUEDAS DO DIA\n"
-
-    for asset in daily_return.sort_values().head(5).index:
-        report += f"{asset}: {daily_return[asset]:.2f}%\n"
-
-    report += "\n⚡ MAIOR VOLATILIDADE (21d)\n"
-
-    vol_clean = vol.dropna()
-
-    for asset in vol_clean.sort_values(ascending=False).head(5).index:
-        report += f"{asset}: {vol_clean[asset]:.2f}%\n"
-
-    return report
-
-
-def send_telegram(message):
-
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     payload = {
-        "chat_id": CHAT_ID,
-        "text": message
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
     }
 
-    requests.post(url, data=payload)
+    try:
+        response = requests.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"[main] erro ao enviar mensagem para o Telegram: {exc}")
+
+
+def _safe_section(section_name: str, fn):
+    try:
+        result = fn()
+        if not result or not str(result).strip():
+            return f"⚠️ <b>{section_name}</b>\nSem dados disponíveis no momento."
+        return str(result).strip()
+    except Exception as exc:
+        print(f"[main] erro na seção {section_name}: {exc}")
+        return f"⚠️ <b>{section_name}</b>\nErro ao gerar esta seção."
+
+
+def build_full_report() -> str:
+    sections = []
+
+    if macro_global:
+        sections.append(_safe_section("Macro Global", macro_global))
+
+    sections.append(_safe_section("Brazil Market", brazil_market))
+    sections.append(_safe_section("USA Market", usa_market))
+
+    if crypto_market:
+        sections.append(_safe_section("Crypto Market", crypto_market))
+
+    return "\n\n".join(section for section in sections if section.strip()).strip()
 
 
 if __name__ == "__main__":
+    print("Starting daily economic briefing...")
 
-    df = get_data()
+    report = build_full_report()
 
-    report = ""
-
-    # 🌎 Macro Global
-    report += macro_global() + "\n\n"
-
-    # ₿ Crypto
-    report += crypto_market() + "\n\n"
-
-    # 🇧🇷 Brasil
-    report += brazil_market() + "\n\n"
-
-    # 📊 Quant Global
-    report += build_analysis(df)
+    print(report)
 
     send_telegram(report)
