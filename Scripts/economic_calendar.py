@@ -5,10 +5,8 @@ from typing import List, Optional
 import requests
 
 
-TE_API_BASE = "https://api.tradingeconomics.com/calendar/country"
 DEFAULT_TE_API_KEY = "guest:guest"
-
-COUNTRIES_PATH = "Brazil,United States"
+BRAZIL_TZ = timezone(timedelta(hours=-3))
 
 TARGET_COUNTRIES = {
     "Brazil": "🇧🇷",
@@ -33,13 +31,28 @@ def _fmt_value(value) -> str:
     return text if text else "-"
 
 
+def _safe_int(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_dt(dt_str: str) -> Optional[datetime]:
     if not dt_str:
         return None
 
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+    candidates = [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ]
+
+    clean = dt_str.replace("Z", "").strip()
+
+    for fmt in candidates:
         try:
-            return datetime.strptime(dt_str.replace("Z", ""), fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(clean, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
 
@@ -52,21 +65,10 @@ def _parse_dt(dt_str: str) -> Optional[datetime]:
 def _to_brazil_time(dt_utc: Optional[datetime]) -> Optional[datetime]:
     if dt_utc is None:
         return None
-
-    brasil_tz = timezone(timedelta(hours=-3))
-    return dt_utc.astimezone(brasil_tz)
+    return dt_utc.astimezone(BRAZIL_TZ)
 
 
-def _fetch_calendar() -> List[dict]:
-    api_key = _get_api_key()
-    url = f"{TE_API_BASE}/{COUNTRIES_PATH}"
-
-    params = {
-        "c": api_key,
-        "importance": "2,3",
-        "f": "json",
-    }
-
+def _request_json(url: str, params: dict) -> List[dict]:
     response = requests.get(
         url,
         params=params,
@@ -76,7 +78,40 @@ def _fetch_calendar() -> List[dict]:
     response.raise_for_status()
 
     data = response.json()
-    return data if isinstance(data, list) else []
+    if isinstance(data, list):
+        return data
+
+    raise ValueError(f"Resposta inesperada da API: {type(data).__name__}")
+
+
+def _fetch_calendar() -> List[dict]:
+    api_key = _get_api_key()
+
+    attempts = [
+        (
+            "country-endpoint",
+            "https://api.tradingeconomics.com/calendar/country/Brazil,United States",
+            {"c": api_key, "importance": "2,3", "f": "json"},
+        ),
+        (
+            "snapshot-endpoint",
+            "https://api.tradingeconomics.com/calendar",
+            {"c": api_key, "importance": "2,3", "f": "json"},
+        ),
+    ]
+
+    last_error = None
+
+    for name, url, params in attempts:
+        try:
+            data = _request_json(url, params)
+            print(f"[economic_calendar] fetch ok via {name}: {len(data)} eventos brutos")
+            return data
+        except Exception as exc:
+            last_error = exc
+            print(f"[economic_calendar] falha via {name}: {exc}")
+
+    raise RuntimeError(f"não foi possível carregar agenda econômica: {last_error}")
 
 
 def _is_today_brazil(dt_utc: Optional[datetime]) -> bool:
@@ -84,21 +119,20 @@ def _is_today_brazil(dt_utc: Optional[datetime]) -> bool:
         return False
 
     dt_br = _to_brazil_time(dt_utc)
-    now_br = datetime.now(timezone(timedelta(hours=-3)))
+    now_br = datetime.now(BRAZIL_TZ)
     return dt_br.date() == now_br.date()
 
 
 def _normalize_event(event: dict) -> Optional[dict]:
-    country = event.get("Country")
-    importance = event.get("Importance")
+    country = _fmt_value(event.get("Country"))
+    importance = _safe_int(event.get("Importance"))
+    dt_utc = _parse_dt(_fmt_value(event.get("Date")))
 
     if country not in TARGET_COUNTRIES:
         return None
 
     if importance not in (2, 3):
         return None
-
-    dt_utc = _parse_dt(event.get("Date", ""))
 
     if not _is_today_brazil(dt_utc):
         return None
@@ -130,7 +164,9 @@ def economic_calendar(limit: int = 6) -> str:
             if normalized:
                 parsed_events.append(normalized)
 
-        parsed_events.sort(key=lambda x: (x["time_br"], -x["importance"], x["country"], x["event"]))
+        parsed_events.sort(
+            key=lambda x: (x["time_br"], -x["importance"], x["country"], x["event"])
+        )
 
         if not parsed_events:
             report += "Sem eventos de média/alta importância para hoje."
@@ -151,7 +187,7 @@ def economic_calendar(limit: int = 6) -> str:
         return report.strip()
 
     except Exception as exc:
-        print(f"[economic_calendar] erro: {exc}")
+        print(f"[economic_calendar] erro final: {exc}")
         report += "Erro ao carregar agenda econômica."
         return report
 
