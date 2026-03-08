@@ -6,6 +6,7 @@ from Scripts.usa_market import usa_market
 from Scripts.news_market import news_market
 from Scripts.history_store import save_daily_snapshot
 from Scripts.quant_summary import quant_summary
+from Scripts.economic_calendar import economic_calendar
 
 try:
     from Scripts.crypto_market import crypto_market
@@ -81,6 +82,10 @@ def build_full_report():
     quant = _safe_section("Quant Summary", quant_summary)
     sections["quant"] = quant
     ordered_sections.append(quant)
+
+    agenda = _safe_section("Economic Agenda", economic_calendar)
+    sections["economic_agenda"] = agenda
+    ordered_sections.append(agenda)
 
     news = _safe_section("News Market", news_market)
     sections["news"] = news
