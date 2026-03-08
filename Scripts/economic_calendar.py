@@ -1,15 +1,14 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import requests
 
 
-TE_CALENDAR_URL = "https://api.tradingeconomics.com/calendar"
-
-# Para testes, o Trading Economics documenta uso com guest:guest.
-# Em produção, prefira usar sua própria chave em TE_API_KEY.
+TE_API_BASE = "https://api.tradingeconomics.com/calendar/country"
 DEFAULT_TE_API_KEY = "guest:guest"
+
+COUNTRIES_PATH = "Brazil,United States"
 
 TARGET_COUNTRIES = {
     "Brazil": "🇧🇷",
@@ -27,7 +26,7 @@ def _get_api_key() -> str:
     return os.environ.get("TE_API_KEY", DEFAULT_TE_API_KEY)
 
 
-def _fmt_value(value: Optional[str]) -> str:
+def _fmt_value(value) -> str:
     if value is None:
         return "-"
     text = str(value).strip()
@@ -35,20 +34,19 @@ def _fmt_value(value: Optional[str]) -> str:
 
 
 def _parse_dt(dt_str: str) -> Optional[datetime]:
-    """
-    Trading Economics retorna datas em UTC em formato ISO.
-    Ex.: 2016-12-02T13:30:00
-    """
     if not dt_str:
         return None
+
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(dt_str.replace("Z", ""), fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
 
     try:
         return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
     except ValueError:
-        try:
-            return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        except ValueError:
-            return None
+        return None
 
 
 def _to_brazil_time(dt_utc: Optional[datetime]) -> Optional[datetime]:
@@ -59,34 +57,26 @@ def _to_brazil_time(dt_utc: Optional[datetime]) -> Optional[datetime]:
     return dt_utc.astimezone(brasil_tz)
 
 
-def _build_params() -> Dict[str, str]:
-    """
-    Filtra:
-    - Brasil e EUA
-    - importância 2 e 3
-    """
-    return {
-        "c": _get_api_key(),
+def _fetch_calendar() -> List[dict]:
+    api_key = _get_api_key()
+    url = f"{TE_API_BASE}/{COUNTRIES_PATH}"
+
+    params = {
+        "c": api_key,
         "importance": "2,3",
-        "countries": ",".join(TARGET_COUNTRIES.keys()),
         "f": "json",
     }
 
-
-def _fetch_calendar() -> List[dict]:
     response = requests.get(
-        TE_CALENDAR_URL,
-        params=_build_params(),
+        url,
+        params=params,
         timeout=20,
         headers={"User-Agent": "Mozilla/5.0"},
     )
     response.raise_for_status()
+
     data = response.json()
-
-    if isinstance(data, list):
-        return data
-
-    return []
+    return data if isinstance(data, list) else []
 
 
 def _is_today_brazil(dt_utc: Optional[datetime]) -> bool:
@@ -120,17 +110,12 @@ def _normalize_event(event: dict) -> Optional[dict]:
         "flag": TARGET_COUNTRIES[country],
         "time_br": dt_br.strftime("%H:%M") if dt_br else "--:--",
         "event": _fmt_value(event.get("Event")),
-        "category": _fmt_value(event.get("Category")),
         "importance": importance,
         "bulls": IMPORTANCE_EMOJI.get(importance, "🐂"),
         "actual": _fmt_value(event.get("Actual")),
         "forecast": _fmt_value(event.get("Forecast")),
         "previous": _fmt_value(event.get("Previous")),
     }
-
-
-def _sort_events(events: List[dict]) -> List[dict]:
-    return sorted(events, key=lambda x: (x["time_br"], -x["importance"], x["country"], x["event"]))
 
 
 def economic_calendar(limit: int = 6) -> str:
@@ -145,7 +130,7 @@ def economic_calendar(limit: int = 6) -> str:
             if normalized:
                 parsed_events.append(normalized)
 
-        parsed_events = _sort_events(parsed_events)
+        parsed_events.sort(key=lambda x: (x["time_br"], -x["importance"], x["country"], x["event"]))
 
         if not parsed_events:
             report += "Sem eventos de média/alta importância para hoje."
