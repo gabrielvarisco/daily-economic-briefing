@@ -34,9 +34,21 @@ LABELS = {
     "^VIX": "VIX",
     "TLT": "Treasuries",
     "DX-Y.NYB": "DXY",
+    "^TNX": "US10Y",
     "BTC-USD": "BTC",
     "ETH-USD": "ETH",
     "SOL-USD": "SOL",
+}
+
+EXCLUDED_FROM_GAINERS_LOSERS = {
+    "^VIX",   # distorce bastante a leitura
+}
+
+EXCLUDED_FROM_BREADTH = {
+    "^VIX",      # não é ativo de risco tradicional
+    "^TNX",      # yield
+    "DX-Y.NYB",  # dollar index
+    BRAZIL_DOLLAR,
 }
 
 
@@ -69,6 +81,28 @@ def _collect_universe() -> List[str]:
     return deduped
 
 
+def _classify_asset(ticker: str) -> str:
+    if ticker in BRAZIL_TICKERS or ticker in {BRAZIL_INDEX, BRAZIL_DOLLAR}:
+        return "Brazil"
+
+    if ticker in USA_INDEX_TICKERS:
+        return "USA Index"
+
+    if ticker in USA_SECTOR_TICKERS:
+        return "USA Sector"
+
+    if ticker in USA_STOCK_TICKERS:
+        return "USA Stock"
+
+    if ticker in USA_MACRO_TICKERS:
+        return "Macro"
+
+    if ticker in CRYPTO_PROXY_TICKERS:
+        return "Crypto"
+
+    return "Other"
+
+
 def _analyze_universe() -> List[Dict]:
     results = []
 
@@ -80,33 +114,73 @@ def _analyze_universe() -> List[Dict]:
             label=LABELS.get(ticker, ticker.replace(".SA", "")),
         )
 
-        if asset:
-            results.append(asset)
+        if not asset:
+            continue
+
+        asset["asset_class"] = _classify_asset(ticker)
+        results.append(asset)
 
     return results
 
 
-def _top_by_metric(
+def _sort_assets(
     assets: List[Dict],
     metric: str,
-    top_n: int = 5,
     reverse: bool = True,
-    exclude_missing: bool = True,
 ) -> List[Dict]:
-    filtered = assets
-
-    if exclude_missing:
-        filtered = [a for a in assets if a.get(metric) is not None]
+    filtered = [a for a in assets if a.get(metric) is not None]
 
     return sorted(
         filtered,
         key=lambda x: x.get(metric, float("-inf") if reverse else float("inf")),
         reverse=reverse,
-    )[:top_n]
+    )
+
+
+def _positive_gainers(assets: List[Dict], top_n: int = 5) -> List[Dict]:
+    filtered = [
+        a for a in assets
+        if a.get("daily_change") is not None
+        and a["daily_change"] > 0
+        and a.get("ticker") not in EXCLUDED_FROM_GAINERS_LOSERS
+    ]
+    return _sort_assets(filtered, "daily_change", reverse=True)[:top_n]
+
+
+def _negative_losers(assets: List[Dict], top_n: int = 5) -> List[Dict]:
+    filtered = [
+        a for a in assets
+        if a.get("daily_change") is not None
+        and a["daily_change"] < 0
+        and a.get("ticker") not in EXCLUDED_FROM_GAINERS_LOSERS
+    ]
+    return _sort_assets(filtered, "daily_change", reverse=False)[:top_n]
+
+
+def _positive_weekly_momentum(assets: List[Dict], top_n: int = 5) -> List[Dict]:
+    filtered = [
+        a for a in assets
+        if a.get("weekly_change") is not None
+        and a["weekly_change"] > 0
+        and a.get("ticker") not in EXCLUDED_FROM_GAINERS_LOSERS
+    ]
+    return _sort_assets(filtered, "weekly_change", reverse=True)[:top_n]
+
+
+def _top_volatility(assets: List[Dict], top_n: int = 5) -> List[Dict]:
+    filtered = [
+        a for a in assets
+        if a.get("vol_21d") is not None
+    ]
+    return _sort_assets(filtered, "vol_21d", reverse=True)[:top_n]
 
 
 def _breadth_summary(assets: List[Dict]) -> Dict[str, str]:
-    valid_assets = [a for a in assets if a.get("daily_change") is not None]
+    valid_assets = [
+        a for a in assets
+        if a.get("daily_change") is not None
+        and a.get("ticker") not in EXCLUDED_FROM_BREADTH
+    ]
 
     if not valid_assets:
         return {
@@ -141,42 +215,57 @@ def _breadth_summary(assets: List[Dict]) -> Dict[str, str]:
     }
 
 
+def _format_asset_line(asset: Dict, metric: str) -> str:
+    return f"{asset['label']} {_fmt(asset.get(metric))}% [{asset['asset_class']}]"
+
+
 def quant_summary() -> str:
     assets = _analyze_universe()
 
     if not assets:
         return "📈 <b>Quant Summary</b>\n\nSem dados disponíveis."
 
-    top_gainers = _top_by_metric(assets, "daily_change", top_n=5, reverse=True)
-    top_losers = _top_by_metric(assets, "daily_change", top_n=5, reverse=False)
-    top_vol = _top_by_metric(assets, "vol_21d", top_n=5, reverse=True)
-    top_week = _top_by_metric(assets, "weekly_change", top_n=5, reverse=True)
-
+    gainers = _positive_gainers(assets, top_n=5)
+    losers = _negative_losers(assets, top_n=5)
+    momentum = _positive_weekly_momentum(assets, top_n=5)
+    volatility = _top_volatility(assets, top_n=5)
     breadth = _breadth_summary(assets)
 
     report = "📈 <b>Quant Summary</b>\n\n"
 
-    report += "<b>Market Breadth</b>\n"
+    report += "<b>Breadth & Regime</b>\n"
     report += f"Up/Down: {breadth['up_down']}\n"
     report += f"Acima MM20: {breadth['mm20']}\n"
     report += f"Acima MM50: {breadth['mm50']}\n"
     report += f"Regime: {breadth['risk_regime']}\n\n"
 
-    report += "<b>Top Gainers (Dia)</b>\n"
-    for asset in top_gainers:
-        report += f"{asset['label']} {_fmt(asset['daily_change'])}%\n"
+    report += "<b>Leaders</b>\n"
+    if gainers:
+        for asset in gainers:
+            report += _format_asset_line(asset, "daily_change") + "\n"
+    else:
+        report += "Sem gainers relevantes hoje.\n"
 
-    report += "\n<b>Top Losers (Dia)</b>\n"
-    for asset in top_losers:
-        report += f"{asset['label']} {_fmt(asset['daily_change'])}%\n"
+    report += "\n<b>Laggards</b>\n"
+    if losers:
+        for asset in losers:
+            report += _format_asset_line(asset, "daily_change") + "\n"
+    else:
+        report += "Sem losers relevantes hoje.\n"
 
-    report += "\n<b>Top Momentum (Semana)</b>\n"
-    for asset in top_week:
-        report += f"{asset['label']} {_fmt(asset['weekly_change'])}%\n"
+    report += "\n<b>Weekly Momentum</b>\n"
+    if momentum:
+        for asset in momentum:
+            report += _format_asset_line(asset, "weekly_change") + "\n"
+    else:
+        report += "Sem momentum positivo relevante na semana.\n"
 
-    report += "\n<b>Top Volatilidade 21d</b>\n"
-    for asset in top_vol:
-        report += f"{asset['label']} {_fmt(asset['vol_21d'])}%\n"
+    report += "\n<b>Volatility Watch</b>\n"
+    if volatility:
+        for asset in volatility:
+            report += _format_asset_line(asset, "vol_21d") + "\n"
+    else:
+        report += "Sem dados de volatilidade.\n"
 
     return report.strip()
 
