@@ -3,6 +3,7 @@ from typing import Callable, List, Tuple
 
 import requests
 
+from Scripts.market_take import market_take
 from Scripts.brazil_market import brazil_market
 from Scripts.usa_market import usa_market
 from Scripts.news_market import news_market
@@ -64,6 +65,8 @@ def _safe_section(name: str, fn: SectionFn) -> str:
 def _build_sections() -> List[Tuple[str, str]]:
     sections: List[Tuple[str, str]] = []
 
+    sections.append(("market_take", _safe_section("Market Take", market_take)))
+
     if macro_global:
         sections.append(("macro", _safe_section("Macro Global", macro_global)))
 
@@ -83,9 +86,13 @@ def send_report_in_batches() -> dict:
     sections = _build_sections()
     structured_sections = {key: value for key, value in sections}
 
-    batch_1_parts = []
+    batch_1_parts = [
+        structured_sections["market_take"],
+    ]
+
     if "macro" in structured_sections:
         batch_1_parts.append(structured_sections["macro"])
+
     batch_1_parts.append(structured_sections["brazil"])
     batch_1_parts.append(structured_sections["usa"])
 
