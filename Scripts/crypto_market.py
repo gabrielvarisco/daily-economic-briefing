@@ -28,9 +28,6 @@ CRYPTO_LABELS = {
     "aave": "AAVE",
 }
 
-TOTAL3_CHART_URL = "https://www.tradingview.com/symbols/TOTAL3/"
-
-
 def send_telegram(message: str) -> None:
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("CHAT_ID")
@@ -152,7 +149,6 @@ def crypto_market() -> str:
         report += f"Total Market Cap: ${total_market_cap:,.0f}\n" if total_market_cap is not None else "Total Market Cap: -\n"
         report += f"BTC Dominance: {_fmt(btc_dominance)}%\n"
         report += f"TOTAL3 aprox.: ${_fmt_billions(total3_estimate)}\n"
-        report += f'TOTAL3 chart: <a href="{TOTAL3_CHART_URL}">TradingView</a>\n'
 
     except Exception as exc:
         print(f"[crypto_market] erro: {exc}")
