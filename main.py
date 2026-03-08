@@ -8,7 +8,6 @@ from Scripts.usa_market import usa_market
 from Scripts.news_market import news_market
 from Scripts.history_store import save_daily_snapshot
 from Scripts.quant_summary import quant_summary
-from Scripts.economic_calendar import economic_calendar
 
 try:
     from Scripts.crypto_market import crypto_market
@@ -75,47 +74,9 @@ def _build_sections() -> List[Tuple[str, str]]:
         sections.append(("crypto", _safe_section("Crypto Market", crypto_market)))
 
     sections.append(("quant", _safe_section("Quant Summary", quant_summary)))
-    sections.append(("economic_agenda", _safe_section("Economic Agenda", economic_calendar)))
     sections.append(("news", _safe_section("News Market", news_market)))
 
     return sections
-
-
-def build_full_report() -> Tuple[str, dict]:
-    sections = _build_sections()
-
-    structured_sections = {key: value for key, value in sections}
-    report_text = "\n\n".join(value for _, value in sections if value.strip()).strip()
-
-    return report_text, structured_sections
-
-
-def build_message_batches() -> List[str]:
-    sections = _build_sections()
-    section_map = {key: value for key, value in sections}
-
-    batches: List[str] = []
-
-    batch_1_parts = []
-    if "macro" in section_map:
-        batch_1_parts.append(section_map["macro"])
-    batch_1_parts.append(section_map["brazil"])
-    batch_1_parts.append(section_map["usa"])
-    batches.append("\n\n".join(batch_1_parts).strip())
-
-    batch_2_parts = []
-    if "crypto" in section_map:
-        batch_2_parts.append(section_map["crypto"])
-    batch_2_parts.append(section_map["quant"])
-    batches.append("\n\n".join(batch_2_parts).strip())
-
-    batch_3_parts = [
-        section_map["economic_agenda"],
-        section_map["news"],
-    ]
-    batches.append("\n\n".join(batch_3_parts).strip())
-
-    return [batch for batch in batches if batch.strip()]
 
 
 def send_report_in_batches() -> dict:
@@ -134,7 +95,6 @@ def send_report_in_batches() -> dict:
     batch_2_parts.append(structured_sections["quant"])
 
     batch_3_parts = [
-        structured_sections["economic_agenda"],
         structured_sections["news"],
     ]
 
