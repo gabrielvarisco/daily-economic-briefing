@@ -1,36 +1,106 @@
 import requests
+from typing import Optional
+
+
+COINGECKO_URL = "https://api.coingecko.com/api/v3"
+
+
+CRYPTO_ASSETS = [
+    "bitcoin",
+    "ethereum",
+    "solana"
+]
+
+
+CRYPTO_LABELS = {
+    "bitcoin": "BTC",
+    "ethereum": "ETH",
+    "solana": "SOL"
+}
+
+
+def _fetch_market_data():
+
+    url = f"{COINGECKO_URL}/coins/markets"
+
+    params = {
+        "vs_currency": "usd",
+        "ids": ",".join(CRYPTO_ASSETS),
+        "order": "market_cap_desc",
+        "per_page": 10,
+        "page": 1,
+        "sparkline": False,
+        "price_change_percentage": "24h,7d"
+    }
+
+    response = requests.get(url, params=params, timeout=20)
+    response.raise_for_status()
+
+    return response.json()
+
+
+def _fetch_global_data():
+
+    url = f"{COINGECKO_URL}/global"
+
+    response = requests.get(url, timeout=20)
+    response.raise_for_status()
+
+    return response.json()["data"]
+
+
+def _fmt(value: Optional[float], digits: int = 2):
+
+    if value is None:
+        return "-"
+
+    return f"{value:.{digits}f}"
+
 
 def crypto_market():
 
-    url = "https://api.coingecko.com/api/v3/global"
-    data = requests.get(url).json()
+    report = "₿ <b>Crypto Market</b>\n\n"
 
-    market_cap = data["data"]["total_market_cap"]["usd"]
-    btc_dominance = data["data"]["market_cap_percentage"]["btc"]
+    try:
 
-    btc = requests.get(
-        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
-    ).json()
+        market_data = _fetch_market_data()
 
-    eth = requests.get(
-        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true"
-    ).json()
+        for coin in market_data:
 
-    btc_price = btc["bitcoin"]["usd"]
-    btc_change = btc["bitcoin"]["usd_24h_change"]
+            symbol = CRYPTO_LABELS.get(coin["id"], coin["symbol"].upper())
 
-    eth_price = eth["ethereum"]["usd"]
-    eth_change = eth["ethereum"]["usd_24h_change"]
+            price = coin.get("current_price")
+            change_24h = coin.get("price_change_percentage_24h")
+            change_7d = coin.get("price_change_percentage_7d_in_currency")
 
-    message = "₿ CRYPTO MARKET\n\n"
+            report += (
+                f"{symbol} ${_fmt(price)} "
+                f"{_fmt(change_24h)}% (24h) "
+                f"{_fmt(change_7d)}% (7d)\n"
+            )
 
-    btc_emoji = "🟢" if btc_change > 0 else "🔴"
-    eth_emoji = "🟢" if eth_change > 0 else "🔴"
+        report += "\n"
 
-    message += f"BTC: ${btc_price:,.0f} ({btc_emoji} {btc_change:.2f}%)\n"
-    message += f"ETH: ${eth_price:,.0f} ({eth_emoji} {eth_change:.2f}%)\n\n"
+        global_data = _fetch_global_data()
 
-    message += f"BTC Dominance: {btc_dominance:.2f}%\n"
-    message += f"Market Cap: ${market_cap/1e12:.2f}T\n"
+        total_market_cap = global_data["total_market_cap"]["usd"]
+        btc_dominance = global_data["market_cap_percentage"]["btc"]
 
-    return message
+        report += f"Total Market Cap: ${total_market_cap:,.0f}\n"
+        report += f"BTC Dominance: {_fmt(btc_dominance)}%\n"
+
+    except Exception as e:
+
+        print(f"[crypto_market] erro: {e}")
+        report += "Erro ao carregar dados de crypto."
+
+    return report
+
+
+if __name__ == "__main__":
+
+    print("Starting Crypto Market script")
+
+    report = crypto_market()
+
+    print(report)
