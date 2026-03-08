@@ -1,4 +1,6 @@
 import os
+from typing import Callable, List, Tuple
+
 import requests
 
 from Scripts.brazil_market import brazil_market
@@ -17,6 +19,9 @@ try:
     from Scripts.macro_global import macro_global
 except ImportError:
     macro_global = None
+
+
+SectionFn = Callable[[], str]
 
 
 def send_telegram(message: str) -> None:
@@ -43,7 +48,7 @@ def send_telegram(message: str) -> None:
         print(f"[main] erro ao enviar mensagem: {exc}")
 
 
-def _safe_section(name: str, fn):
+def _safe_section(name: str, fn: SectionFn) -> str:
     try:
         result = fn()
 
@@ -57,53 +62,102 @@ def _safe_section(name: str, fn):
         return f"⚠️ <b>{name}</b>\nErro ao gerar esta seção."
 
 
-def build_full_report():
-    sections = {}
-    ordered_sections = []
+def _build_sections() -> List[Tuple[str, str]]:
+    sections: List[Tuple[str, str]] = []
 
     if macro_global:
-        macro = _safe_section("Macro Global", macro_global)
-        sections["macro"] = macro
-        ordered_sections.append(macro)
+        sections.append(("macro", _safe_section("Macro Global", macro_global)))
 
-    brazil = _safe_section("Brazil Market", brazil_market)
-    sections["brazil"] = brazil
-    ordered_sections.append(brazil)
-
-    usa = _safe_section("USA Market", usa_market)
-    sections["usa"] = usa
-    ordered_sections.append(usa)
+    sections.append(("brazil", _safe_section("Brazil Market", brazil_market)))
+    sections.append(("usa", _safe_section("USA Market", usa_market)))
 
     if crypto_market:
-        crypto = _safe_section("Crypto Market", crypto_market)
-        sections["crypto"] = crypto
-        ordered_sections.append(crypto)
+        sections.append(("crypto", _safe_section("Crypto Market", crypto_market)))
 
-    quant = _safe_section("Quant Summary", quant_summary)
-    sections["quant"] = quant
-    ordered_sections.append(quant)
+    sections.append(("quant", _safe_section("Quant Summary", quant_summary)))
+    sections.append(("economic_agenda", _safe_section("Economic Agenda", economic_calendar)))
+    sections.append(("news", _safe_section("News Market", news_market)))
 
-    agenda = _safe_section("Economic Agenda", economic_calendar)
-    sections["economic_agenda"] = agenda
-    ordered_sections.append(agenda)
+    return sections
 
-    news = _safe_section("News Market", news_market)
-    sections["news"] = news
-    ordered_sections.append(news)
 
-    report_text = "\n\n".join(ordered_sections).strip()
+def build_full_report() -> Tuple[str, dict]:
+    sections = _build_sections()
 
-    return report_text, sections
+    structured_sections = {key: value for key, value in sections}
+    report_text = "\n\n".join(value for _, value in sections if value.strip()).strip()
+
+    return report_text, structured_sections
+
+
+def build_message_batches() -> List[str]:
+    sections = _build_sections()
+    section_map = {key: value for key, value in sections}
+
+    batches: List[str] = []
+
+    batch_1_parts = []
+    if "macro" in section_map:
+        batch_1_parts.append(section_map["macro"])
+    batch_1_parts.append(section_map["brazil"])
+    batch_1_parts.append(section_map["usa"])
+    batches.append("\n\n".join(batch_1_parts).strip())
+
+    batch_2_parts = []
+    if "crypto" in section_map:
+        batch_2_parts.append(section_map["crypto"])
+    batch_2_parts.append(section_map["quant"])
+    batches.append("\n\n".join(batch_2_parts).strip())
+
+    batch_3_parts = [
+        section_map["economic_agenda"],
+        section_map["news"],
+    ]
+    batches.append("\n\n".join(batch_3_parts).strip())
+
+    return [batch for batch in batches if batch.strip()]
+
+
+def send_report_in_batches() -> dict:
+    sections = _build_sections()
+    structured_sections = {key: value for key, value in sections}
+
+    batch_1_parts = []
+    if "macro" in structured_sections:
+        batch_1_parts.append(structured_sections["macro"])
+    batch_1_parts.append(structured_sections["brazil"])
+    batch_1_parts.append(structured_sections["usa"])
+
+    batch_2_parts = []
+    if "crypto" in structured_sections:
+        batch_2_parts.append(structured_sections["crypto"])
+    batch_2_parts.append(structured_sections["quant"])
+
+    batch_3_parts = [
+        structured_sections["economic_agenda"],
+        structured_sections["news"],
+    ]
+
+    batches = [
+        "\n\n".join(batch_1_parts).strip(),
+        "\n\n".join(batch_2_parts).strip(),
+        "\n\n".join(batch_3_parts).strip(),
+    ]
+
+    for idx, batch in enumerate(batches, start=1):
+        if not batch:
+            continue
+
+        print(f"[main] enviando bloco {idx}...")
+        send_telegram(batch)
+
+    return structured_sections
 
 
 if __name__ == "__main__":
     print("Starting daily economic briefing...")
 
-    report, structured_sections = build_full_report()
-
-    print(report)
+    structured_sections = send_report_in_batches()
 
     filepath = save_daily_snapshot(structured_sections)
     print(f"[main] snapshot salvo em {filepath}")
-
-    send_telegram(report)
