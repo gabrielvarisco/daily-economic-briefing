@@ -1,16 +1,16 @@
-name: Crypto Market
+name: Brazil Market
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "10 10 * * *"
+    - cron: "30 11 * * 1-5"
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -23,8 +23,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests
 
-      - name: Run Crypto market script
+      - name: Run Brazil Market script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python Scripts/crypto_market.py
+        run: python Scripts/brazil_market.py
