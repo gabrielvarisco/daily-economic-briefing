@@ -45,14 +45,18 @@ def _escape(text: str) -> str:
 
 
 def _convert_html(text: str) -> str:
-    safe = text or ""
 
-    placeholders = {
-        "__B_OPEN__": "<b>",
-        "__B_CLOSE__": "</b>",
-        "__I_OPEN__": "<i>",
-        "__I_CLOSE__": "</i>",
-    }
+    if not text:
+        return ""
+
+    # remove tags html usadas no telegram
+    text = text.replace("<b>", "").replace("</b>", "")
+    text = text.replace("<i>", "").replace("</i>", "")
+
+    # escapa html restante
+    text = _escape(text)
+
+    return text.replace("\n", "<br>")
 
     safe = safe.replace("<b>", placeholders["__B_OPEN__"])
     safe = safe.replace("</b>", placeholders["__B_CLOSE__"])
@@ -155,7 +159,7 @@ def _summary_cards(sections: Dict[str, str]) -> str:
     ibov_change = _extract_metric(brazil, r"IBOV\s+[0-9\.,]+\s+([\-0-9\.]+%)")
     spy_change = _extract_metric(usa, r"S&P500\s+[0-9\.,]+\s+([\-0-9\.]+%)")
     btc_change = _extract_metric(crypto, r"BTC\s+\$[0-9\.,]+\s+([\-0-9\.]+%)\s+\(24h\)")
-    vix_change = _extract_metric(macro, r"VIX:\s+[0-9\.,]+\s+\([🟢🔴⚪]\s+([\-0-9\.]+%)\)")
+    vix_change = _extract_metric(macro, r"VIX:\s+[0-9\.,]+\s+\([^\)]*([\-0-9\.]+%)\)")
 
     cards = [
         ("Regime", regime),
