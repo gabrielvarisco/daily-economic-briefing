@@ -37,7 +37,11 @@ def _index_filename():
 
 
 def _escape(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
 
 def _convert_html(text: str) -> str:
@@ -63,25 +67,54 @@ def _convert_html(text: str) -> str:
     return safe.replace("\n", "<br>")
 
 
+def _normalize_title_for_strip(title: str) -> str:
+    title = re.sub(r"<[^>]+>", "", title or "")
+    title = re.sub(r"^[^\wÀ-ÿA-Za-z]+", "", title).strip()
+    return title
+
+
 def _strip_duplicate_title(title: str, body: str) -> str:
-    plain_title = re.sub(r"^[^\wÀ-ÿA-Za-z]+", "", title).strip()
-    plain_body = body.strip()
+    if not body:
+        return ""
 
-    if plain_body.startswith(title):
-        return plain_body[len(title):].lstrip()
+    cleaned = body.strip()
 
-    if plain_body.startswith(plain_title):
-        return plain_body[len(plain_title):].lstrip()
+    variants = [
+        title.strip(),
+        _normalize_title_for_strip(title),
+    ]
 
-    return body
+    body_variants = [cleaned]
+
+    plain_body = re.sub(r"<[^>]+>", "", cleaned).strip()
+    body_variants.append(plain_body)
+
+    for variant in variants:
+        if not variant:
+            continue
+
+        for candidate in body_variants:
+            if candidate.startswith(variant):
+                return cleaned[len(cleaned) - len(candidate[len(variant):].lstrip()):]
+
+    # remove casos como "🧠 <b>Market Take</b>"
+    plain_title = _normalize_title_for_strip(title)
+    cleaned_plain = re.sub(r"<[^>]+>", "", cleaned).strip()
+    cleaned_plain = re.sub(r"^[^\wÀ-ÿA-Za-z]+", "", cleaned_plain).strip()
+
+    if plain_title and cleaned_plain.startswith(plain_title):
+        pattern = r"^\s*[^\wÀ-ÿA-Za-z]*\s*(?:<b>)?\s*" + re.escape(plain_title) + r"\s*(?:</b>)?\s*"
+        cleaned = re.sub(pattern, "", cleaned, count=1, flags=re.IGNORECASE)
+
+    return cleaned.strip()
 
 
-def _card(title: str, body: str) -> str:
+def _card(title: str, body: str, extra_class: str = "") -> str:
     body = _strip_duplicate_title(title, body)
     body = _convert_html(body)
 
     return f"""
-<section class="card">
+<section class="card {extra_class}">
   <div class="card-title">{title}</div>
   <div class="card-body">{body}</div>
 </section>
@@ -119,17 +152,17 @@ def _summary_cards(sections: Dict[str, str]) -> str:
     macro = sections.get("macro", "")
 
     regime = _extract_regime(market_take)
-    ibov = _extract_metric(brazil, r"IBOV\s+([0-9\.\-]+%\b|[0-9\.\-]+)")
-    spy = _extract_metric(usa, r"S&P500\s+[0-9\.\-]+\s+([\-0-9\.]+%)")
-    btc = _extract_metric(crypto, r"BTC\s+\$[0-9\.\-]+\s+([\-0-9\.]+%)\s+\(24h\)")
-    vix = _extract_metric(macro, r"VIX:\s+[0-9\.\-]+\s+\([^\)]*([\-0-9\.]+%)\)")
+    ibov_change = _extract_metric(brazil, r"IBOV\s+[0-9\.,]+\s+([\-0-9\.]+%)")
+    spy_change = _extract_metric(usa, r"S&P500\s+[0-9\.,]+\s+([\-0-9\.]+%)")
+    btc_change = _extract_metric(crypto, r"BTC\s+\$[0-9\.,]+\s+([\-0-9\.]+%)\s+\(24h\)")
+    vix_change = _extract_metric(macro, r"VIX:\s+[0-9\.,]+\s+\([🟢🔴⚪]\s+([\-0-9\.]+%)\)")
 
     cards = [
         ("Regime", regime),
-        ("IBOV", ibov),
-        ("S&P500", spy),
-        ("BTC 24h", btc),
-        ("VIX", vix),
+        ("IBOV", ibov_change),
+        ("S&P500", spy_change),
+        ("BTC 24h", btc_change),
+        ("VIX", vix_change),
     ]
 
     html_parts = []
@@ -147,16 +180,18 @@ def _summary_cards(sections: Dict[str, str]) -> str:
 
 
 def _build_report_html(sections: Dict[str, str]) -> str:
-    cards = []
+    summary_html = _summary_cards(sections)
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
+    cards = []
     for key in SECTION_TITLES:
         if key not in sections:
             continue
-        cards.append(_card(SECTION_TITLES[key], sections[key]))
+
+        extra_class = "wide-card" if key in {"market_take", "news"} else ""
+        cards.append(_card(SECTION_TITLES[key], sections[key], extra_class=extra_class))
 
     cards_html = "\n".join(cards)
-    summary_html = _summary_cards(sections)
-    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""
 <!DOCTYPE html>
@@ -190,7 +225,7 @@ body {{
 }}
 
 .container {{
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 32px 20px 56px;
 }}
@@ -198,14 +233,15 @@ body {{
 .hero {{
   background: linear-gradient(135deg, #16223b 0%, #11192a 100%);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 28px;
+  border-radius: 20px;
+  padding: 30px;
   margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }}
 
 .hero h1 {{
   margin: 0 0 8px;
-  font-size: 36px;
+  font-size: 38px;
 }}
 
 .hero p {{
@@ -231,7 +267,7 @@ body {{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
-  margin: 22px 0 28px;
+  margin: 24px 0 28px;
 }}
 
 .metric-card {{
@@ -239,6 +275,7 @@ body {{
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
+  min-height: 96px;
 }}
 
 .metric-label {{
@@ -246,17 +283,18 @@ body {{
   color: var(--muted);
   margin-bottom: 8px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }}
 
 .metric-value {{
   font-size: 24px;
   font-weight: 700;
+  line-height: 1.2;
 }}
 
 .grid {{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 18px;
 }}
 
@@ -265,6 +303,11 @@ body {{
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+}}
+
+.wide-card {{
+  grid-column: 1 / -1;
 }}
 
 .card-title {{
@@ -278,7 +321,7 @@ body {{
 .card-body {{
   padding: 18px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   word-break: break-word;
 }}
 
@@ -304,6 +347,10 @@ body {{
 
   .container {{
     padding: 20px 14px 40px;
+  }}
+
+  .grid {{
+    grid-template-columns: 1fr;
   }}
 }}
 </style>
@@ -434,7 +481,7 @@ body {{
 }}
 
 .container {{
-  max-width: 1200px;
+  max-width: 1220px;
   margin: 0 auto;
   padding: 32px 20px 56px;
 }}
@@ -442,14 +489,14 @@ body {{
 .hero {{
   background: linear-gradient(135deg, #16223b 0%, #11192a 100%);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 28px;
+  border-radius: 20px;
+  padding: 30px;
   margin-bottom: 24px;
 }}
 
 .hero h1 {{
   margin: 0 0 8px;
-  font-size: 36px;
+  font-size: 38px;
 }}
 
 .hero p {{
