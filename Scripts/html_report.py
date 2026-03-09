@@ -345,9 +345,11 @@ body {{
 
 
 def _list_reports() -> List[str]:
+    _ensure_reports_dir()
+
     files = [
         f for f in os.listdir(REPORTS_DIR)
-        if re.match(r"daily_report_\d{{4}}-\d{{2}}-\d{{2}}\.html$", f)
+        if re.match(r"daily_report_\d{4}-\d{2}-\d{2}\.html$", f)
     ]
     files.sort(reverse=True)
     return files
