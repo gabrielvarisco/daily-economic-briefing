@@ -41,281 +41,572 @@ def _escape(text: str) -> str:
 
 
 def _convert_html(text: str) -> str:
-    text = text.replace("<b>", "__B__").replace("</b>", "__B_END__")
-    text = _escape(text)
-    text = text.replace("__B__", "<b>").replace("__B_END__", "</b>")
-    return text.replace("\n", "<br>")
+    safe = text or ""
+
+    placeholders = {
+        "__B_OPEN__": "<b>",
+        "__B_CLOSE__": "</b>",
+        "__I_OPEN__": "<i>",
+        "__I_CLOSE__": "</i>",
+    }
+
+    safe = safe.replace("<b>", placeholders["__B_OPEN__"])
+    safe = safe.replace("</b>", placeholders["__B_CLOSE__"])
+    safe = safe.replace("<i>", placeholders["__I_OPEN__"])
+    safe = safe.replace("</i>", placeholders["__I_CLOSE__"])
+
+    safe = _escape(safe)
+
+    for key, value in placeholders.items():
+        safe = safe.replace(_escape(key), value)
+
+    return safe.replace("\n", "<br>")
+
+
+def _strip_duplicate_title(title: str, body: str) -> str:
+    plain_title = re.sub(r"^[^\wÀ-ÿA-Za-z]+", "", title).strip()
+    plain_body = body.strip()
+
+    if plain_body.startswith(title):
+        return plain_body[len(title):].lstrip()
+
+    if plain_body.startswith(plain_title):
+        return plain_body[len(plain_title):].lstrip()
+
+    return body
 
 
 def _card(title: str, body: str) -> str:
+    body = _strip_duplicate_title(title, body)
     body = _convert_html(body)
 
     return f"""
 <section class="card">
-<div class="card-title">{title}</div>
-<div class="card-body">{body}</div>
+  <div class="card-title">{title}</div>
+  <div class="card-body">{body}</div>
 </section>
 """
 
 
 def _extract_regime(text: str) -> str:
     m = re.search(r"Regime:\s*<b>(.*?)</b>", text or "")
-    return m.group(1) if m else "-"
+    return m.group(1).strip() if m else "-"
 
 
 def _extract_summary(text: str) -> str:
-    text = re.sub("<.*?>", "", text)
+    text = re.sub(r"<[^>]+>", "", text or "")
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    for l in lines:
-        if l.lower().startswith("regime"):
+
+    for line in lines:
+        if line.lower().startswith("regime:"):
             continue
-        if len(l) > 20:
-            return l[:160]
+        if len(line) > 20:
+            return line[:180]
+
     return "-"
 
 
-def _list_reports():
-    files = [
-        f for f in os.listdir(REPORTS_DIR)
-        if re.match(r"daily_report_\d{4}-\d{2}-\d{2}\.html", f)
+def _extract_metric(section_text: str, pattern: str) -> str:
+    match = re.search(pattern, section_text or "", re.MULTILINE)
+    return match.group(1).strip() if match else "-"
+
+
+def _summary_cards(sections: Dict[str, str]) -> str:
+    market_take = sections.get("market_take", "")
+    brazil = sections.get("brazil", "")
+    usa = sections.get("usa", "")
+    crypto = sections.get("crypto", "")
+    macro = sections.get("macro", "")
+
+    regime = _extract_regime(market_take)
+    ibov = _extract_metric(brazil, r"IBOV\s+([0-9\.\-]+%\b|[0-9\.\-]+)")
+    spy = _extract_metric(usa, r"S&P500\s+[0-9\.\-]+\s+([\-0-9\.]+%)")
+    btc = _extract_metric(crypto, r"BTC\s+\$[0-9\.\-]+\s+([\-0-9\.]+%)\s+\(24h\)")
+    vix = _extract_metric(macro, r"VIX:\s+[0-9\.\-]+\s+\([^\)]*([\-0-9\.]+%)\)")
+
+    cards = [
+        ("Regime", regime),
+        ("IBOV", ibov),
+        ("S&P500", spy),
+        ("BTC 24h", btc),
+        ("VIX", vix),
     ]
-    files.sort(reverse=True)
-    return files
+
+    html_parts = []
+    for label, value in cards:
+        html_parts.append(
+            f"""
+<div class="metric-card">
+  <div class="metric-label">{label}</div>
+  <div class="metric-value">{value}</div>
+</div>
+"""
+        )
+
+    return "\n".join(html_parts)
 
 
 def _build_report_html(sections: Dict[str, str]) -> str:
-
     cards = []
 
     for key in SECTION_TITLES:
-
         if key not in sections:
             continue
-
         cards.append(_card(SECTION_TITLES[key], sections[key]))
 
-    cards = "\n".join(cards)
+    cards_html = "\n".join(cards)
+    summary_html = _summary_cards(sections)
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Economic Briefing</title>
 
 <style>
+:root {{
+  --bg: #0b1220;
+  --panel: #131c2e;
+  --panel-2: #182338;
+  --border: #2a3957;
+  --text: #e8eefc;
+  --muted: #9eb0d1;
+  --accent: #74a7ff;
+  --accent-2: #59d0a7;
+}}
+
+* {{
+  box-sizing: border-box;
+}}
 
 body {{
-background:#0e1117;
-color:#e6edf3;
-font-family:Arial;
-margin:0;
+  margin: 0;
+  background: linear-gradient(180deg, #0b1220 0%, #0d1425 100%);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
 }}
 
 .container {{
-max-width:1200px;
-margin:auto;
-padding:30px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 20px 56px;
 }}
 
 .hero {{
-margin-bottom:30px;
+  background: linear-gradient(135deg, #16223b 0%, #11192a 100%);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px;
+  margin-bottom: 24px;
 }}
 
 .hero h1 {{
-margin:0;
-font-size:36px;
+  margin: 0 0 8px;
+  font-size: 36px;
+}}
+
+.hero p {{
+  margin: 0;
+  color: var(--muted);
+}}
+
+.hero-top {{
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}}
+
+.top-link a {{
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}}
+
+.metrics-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin: 22px 0 28px;
+}}
+
+.metric-card {{
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}}
+
+.metric-label {{
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}}
+
+.metric-value {{
+  font-size: 24px;
+  font-weight: 700;
 }}
 
 .grid {{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
-gap:20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 18px;
 }}
 
 .card {{
-background:#161b22;
-border:1px solid #30363d;
-border-radius:12px;
-overflow:hidden;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
 }}
 
 .card-title {{
-padding:12px 16px;
-font-weight:bold;
-background:#0d1117;
-border-bottom:1px solid #30363d;
+  padding: 14px 18px;
+  font-weight: 700;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
 }}
 
 .card-body {{
-padding:16px;
-font-size:14px;
+  padding: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
 }}
 
-a {{
-color:#58a6ff;
+.card-body b {{
+  color: #ffffff;
 }}
 
+.card-body i {{
+  color: var(--muted);
+}}
+
+.footer {{
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}}
+
+@media (max-width: 700px) {{
+  .hero h1 {{
+    font-size: 30px;
+  }}
+
+  .container {{
+    padding: 20px 14px 40px;
+  }}
+}}
 </style>
 </head>
 
 <body>
-
 <div class="container">
 
-<div class="hero">
-<h1>Daily Economic Briefing</h1>
-<p>Market intelligence dashboard</p>
-<p><a href="index.html">← Back to history</a></p>
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <h1>Daily Economic Briefing</h1>
+        <p>Market intelligence dashboard</p>
+      </div>
+      <div class="top-link">
+        <a href="index.html">← Back to history</a>
+      </div>
+    </div>
+
+    <div class="metrics-grid">
+      {summary_html}
+    </div>
+
+    <p>Generated: {generated_at}</p>
+  </div>
+
+  <div class="grid">
+    {cards_html}
+  </div>
+
+  <div class="footer">
+    Generated automatically by your market briefing system.
+  </div>
+
 </div>
-
-<div class="grid">
-
-{cards}
-
-</div>
-
-</div>
-
 </body>
 </html>
 """
 
 
-def _build_index_html() -> str:
+def _list_reports() -> List[str]:
+    files = [
+        f for f in os.listdir(REPORTS_DIR)
+        if re.match(r"daily_report_\d{{4}}-\d{{2}}-\d{{2}}\.html$", f)
+    ]
+    files.sort(reverse=True)
+    return files
 
-    reports = _list_reports()
 
-    latest_regime = "-"
-    latest_summary = "-"
-    latest_date = "-"
+def _extract_report_data(filepath: str) -> Tuple[str, str]:
+    regime = "-"
+    summary = "-"
 
-    if reports:
-
-        latest_file = reports[0]
-        latest_date = latest_file.replace("daily_report_", "").replace(".html", "")
-
-        with open(os.path.join(REPORTS_DIR, latest_file), encoding="utf-8") as f:
+    try:
+        with open(filepath, encoding="utf-8") as f:
             html = f.read()
 
-        latest_regime = _extract_regime(html)
-        latest_summary = _extract_summary(html)
+        regime = _extract_regime(html)
+        summary = _extract_summary(html)
+    except Exception:
+        pass
+
+    return regime, summary
+
+
+def _build_index_html() -> str:
+    reports = _list_reports()
+
+    latest_date = "-"
+    latest_regime = "-"
+    latest_summary = "-"
+
+    if reports:
+        latest_file = reports[0]
+        latest_date = latest_file.replace("daily_report_", "").replace(".html", "")
+        latest_regime, latest_summary = _extract_report_data(os.path.join(REPORTS_DIR, latest_file))
 
     rows = []
 
-    for r in reports:
-
-        date = r.replace("daily_report_", "").replace(".html", "")
+    for report in reports:
+        date = report.replace("daily_report_", "").replace(".html", "")
+        regime, summary = _extract_report_data(os.path.join(REPORTS_DIR, report))
 
         rows.append(
             f"""
 <tr>
-<td>{date}</td>
-<td><a href="{r}">Open report</a></td>
+  <td>{date}</td>
+  <td>{regime}</td>
+  <td>{_escape(summary)}</td>
+  <td><a href="{report}">Open report</a></td>
 </tr>
 """
         )
 
-    rows = "\n".join(rows)
+    rows_html = "\n".join(rows)
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Market Dashboard</title>
 
 <style>
+:root {{
+  --bg: #0b1220;
+  --panel: #131c2e;
+  --panel-2: #182338;
+  --border: #2a3957;
+  --text: #e8eefc;
+  --muted: #9eb0d1;
+  --accent: #74a7ff;
+}}
+
+* {{
+  box-sizing: border-box;
+}}
 
 body {{
-background:#0e1117;
-color:#e6edf3;
-font-family:Arial;
-margin:0;
+  margin: 0;
+  background: linear-gradient(180deg, #0b1220 0%, #0d1425 100%);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
 }}
 
 .container {{
-max-width:1100px;
-margin:auto;
-padding:40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 20px 56px;
 }}
 
-h1 {{
-margin-top:0;
+.hero {{
+  background: linear-gradient(135deg, #16223b 0%, #11192a 100%);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px;
+  margin-bottom: 24px;
+}}
+
+.hero h1 {{
+  margin: 0 0 8px;
+  font-size: 36px;
+}}
+
+.hero p {{
+  margin: 0;
+  color: var(--muted);
 }}
 
 .dashboard {{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-gap:20px;
-margin-bottom:40px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 24px 0 28px;
 }}
 
 .widget {{
-background:#161b22;
-padding:20px;
-border-radius:10px;
-border:1px solid #30363d;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}}
+
+.widget-label {{
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}}
+
+.widget-value {{
+  font-size: 24px;
+  font-weight: 700;
+}}
+
+.widget-text {{
+  font-size: 14px;
+  line-height: 1.5;
+}}
+
+.panel {{
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}}
+
+.table-title {{
+  padding: 16px 18px;
+  font-weight: 700;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
 }}
 
 table {{
-width:100%;
-border-collapse:collapse;
+  width: 100%;
+  border-collapse: collapse;
 }}
 
-td {{
-padding:10px;
-border-bottom:1px solid #30363d;
+th, td {{
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-size: 14px;
+}}
+
+th {{
+  color: var(--accent);
+  background: rgba(255,255,255,0.02);
 }}
 
 a {{
-color:#58a6ff;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
 }}
 
+.footer {{
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}}
+
+@media (max-width: 900px) {{
+  th:nth-child(3),
+  td:nth-child(3) {{
+    display: none;
+  }}
+}}
+
+@media (max-width: 700px) {{
+  .hero h1 {{
+    font-size: 30px;
+  }}
+
+  .container {{
+    padding: 20px 14px 40px;
+  }}
+}}
 </style>
 </head>
 
 <body>
-
 <div class="container">
 
-<h1>Daily Market Dashboard</h1>
+  <div class="hero">
+    <h1>Daily Market Dashboard</h1>
+    <p>Historical archive of the market briefing system</p>
 
-<div class="dashboard">
+    <div class="dashboard">
+      <div class="widget">
+        <div class="widget-label">Latest Report</div>
+        <div class="widget-value">{latest_date}</div>
+      </div>
 
-<div class="widget">
-<b>Latest Report</b><br><br>
-{latest_date}
+      <div class="widget">
+        <div class="widget-label">Market Regime</div>
+        <div class="widget-value">{latest_regime}</div>
+      </div>
+
+      <div class="widget">
+        <div class="widget-label">Market Summary</div>
+        <div class="widget-text">{_escape(latest_summary)}</div>
+      </div>
+    </div>
+
+    <p>Updated: {generated_at}</p>
+  </div>
+
+  <div class="panel">
+    <div class="table-title">Report History</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Regime</th>
+          <th>Summary</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows_html}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Daily report archive.
+  </div>
+
 </div>
-
-<div class="widget">
-<b>Market Regime</b><br><br>
-{latest_regime}
-</div>
-
-<div class="widget">
-<b>Market Summary</b><br><br>
-{latest_summary}
-</div>
-
-</div>
-
-<h2>Report History</h2>
-
-<table>
-
-{rows}
-
-</table>
-
-</div>
-
 </body>
 </html>
 """
 
 
 def generate_index_page():
+    _ensure_reports_dir()
 
     index_path = _index_filename()
 
@@ -326,7 +617,6 @@ def generate_index_page():
 
 
 def generate_html_report(sections: Dict[str, str]) -> Tuple[str, str]:
-
     _ensure_reports_dir()
 
     report_path = _today_filename()
