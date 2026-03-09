@@ -1,9 +1,14 @@
+import logging
+import os
 import time
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+
+logger = logging.getLogger("asset_analyzer")
 
 
 def _normalize_close(data: pd.DataFrame | pd.Series) -> pd.Series:
@@ -37,12 +42,17 @@ def _safe_download(
     period: str = "1y",
     interval: str = "1d",
     auto_adjust: bool = True,
-    retries: int = 3,
-    pause: float = 1.0,
+    retries: Optional[int] = None,
+    pause: Optional[float] = None,
 ) -> pd.Series:
     """
     Faz download com retry simples e retorna a série de fechamento.
     """
+    retries = retries if retries is not None else int(os.getenv("YF_RETRIES", "3"))
+    pause = pause if pause is not None else float(os.getenv("YF_RETRY_PAUSE", "1.0"))
+    timeout = float(os.getenv("YF_TIMEOUT", "15"))
+    retries = max(1, retries)
+
     last_error = None
 
     for attempt in range(retries):
@@ -54,6 +64,7 @@ def _safe_download(
                 auto_adjust=auto_adjust,
                 progress=False,
                 threads=False,
+                timeout=timeout,
             )
 
             close = _normalize_close(data)
@@ -63,14 +74,19 @@ def _safe_download(
 
         except Exception as exc:
             last_error = exc
+            err = str(exc).lower()
+
+            if "connect tunnel failed" in err or "response 403" in err or "proxyerror" in err:
+                logger.warning("network/proxy blocked ticker download", extra={"section": ticker, "status": "blocked"})
+                break
 
         if attempt < retries - 1:
             time.sleep(pause)
 
     if last_error:
-        print(f"[asset_analyzer] erro ao baixar {ticker}: {last_error}")
+        logger.warning(f"erro ao baixar {ticker}: {last_error}")
     else:
-        print(f"[asset_analyzer] sem dados para {ticker}")
+        logger.info(f"sem dados para {ticker}")
 
     return pd.Series(dtype=float, name="Close")
 

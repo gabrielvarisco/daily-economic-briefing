@@ -1,41 +1,29 @@
+import hashlib
+import logging
 import os
-from typing import Callable, List, Tuple
+import time
+import uuid
+from typing import Set
 
 import requests
 
-from Scripts.market_take import market_take
-from Scripts.day_over_day import day_over_day
-from Scripts.brazil_market import brazil_market
-from Scripts.usa_market import usa_market
-from Scripts.news_market import news_market
 from Scripts.history_store import save_daily_snapshot
-from Scripts.quant_summary import quant_summary
 from Scripts.html_report import generate_html_report
+from Scripts.logging_utils import configure_logging
+from Scripts.pipeline import build_batches, build_sections
 
-try:
-    from Scripts.crypto_market import crypto_market
-except ImportError:
-    crypto_market = None
-
-try:
-    from Scripts.macro_global import macro_global
-except ImportError:
-    macro_global = None
+logger = logging.getLogger("main")
 
 
-SectionFn = Callable[[], str]
-
-
-def send_telegram(message: str) -> None:
+def send_telegram(message: str, run_id: str, retries: int = 3) -> bool:
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("CHAT_ID")
 
     if not token or not chat_id:
-        print("[main] TELEGRAM_TOKEN ou CHAT_ID não configurados.")
-        return
+        logger.warning("telegram not configured", extra={"run_id": run_id, "status": "skipped"})
+        return False
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-
     payload = {
         "chat_id": chat_id,
         "text": message,
@@ -43,96 +31,64 @@ def send_telegram(message: str) -> None:
         "disable_web_page_preview": True,
     }
 
-    try:
-        response = requests.post(url, json=payload, timeout=20)
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        print(f"[main] erro ao enviar mensagem: {exc}")
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            if response.status_code in (429, 500, 502, 503, 504) and attempt < retries - 1:
+                backoff_seconds = (2 ** attempt)
+                logger.warning(
+                    "telegram transient failure",
+                    extra={"run_id": run_id, "status": response.status_code},
+                )
+                time.sleep(backoff_seconds)
+                continue
+
+            response.raise_for_status()
+            return True
+
+        except requests.RequestException as exc:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            logger.error(f"telegram send failed: {exc}", extra={"run_id": run_id, "status": "error"})
+            return False
+
+    return False
 
 
-def _safe_section(name: str, fn: SectionFn) -> str:
-    try:
-        result = fn()
+def send_report_in_batches(run_id: str) -> dict:
+    structured_sections, metrics = build_sections(run_id=run_id)
+    batches = build_batches(structured_sections)
 
-        if not result or not str(result).strip():
-            return f"⚠️ <b>{name}</b>\nSem dados disponíveis."
-
-        return str(result).strip()
-
-    except Exception as exc:
-        print(f"[main] erro na seção {name}: {exc}")
-        return f"⚠️ <b>{name}</b>\nErro ao gerar esta seção."
-
-
-def _build_sections() -> List[Tuple[str, str]]:
-    sections: List[Tuple[str, str]] = []
-
-    sections.append(("market_take", _safe_section("Market Take", market_take)))
-    sections.append(("day_over_day", _safe_section("Since Last Snapshot", day_over_day)))
-
-    if macro_global:
-        sections.append(("macro", _safe_section("Macro Global", macro_global)))
-
-    sections.append(("brazil", _safe_section("Brazil Market", brazil_market)))
-    sections.append(("usa", _safe_section("USA Market", usa_market)))
-
-    if crypto_market:
-        sections.append(("crypto", _safe_section("Crypto Market", crypto_market)))
-
-    sections.append(("quant", _safe_section("Quant Summary", quant_summary)))
-    sections.append(("news", _safe_section("News Market", news_market)))
-
-    return sections
-
-
-def send_report_in_batches() -> dict:
-    sections = _build_sections()
-    structured_sections = {key: value for key, value in sections}
-
-    batch_1_parts = [
-        structured_sections["market_take"],
-        structured_sections["day_over_day"],
-    ]
-
-    if "macro" in structured_sections:
-        batch_1_parts.append(structured_sections["macro"])
-
-    batch_1_parts.append(structured_sections["brazil"])
-    batch_1_parts.append(structured_sections["usa"])
-
-    batch_2_parts = []
-    if "crypto" in structured_sections:
-        batch_2_parts.append(structured_sections["crypto"])
-    batch_2_parts.append(structured_sections["quant"])
-
-    batch_3_parts = [
-        structured_sections["news"],
-    ]
-
-    batches = [
-        "\n\n".join(batch_1_parts).strip(),
-        "\n\n".join(batch_2_parts).strip(),
-        "\n\n".join(batch_3_parts).strip(),
-    ]
-
+    sent_hashes: Set[str] = set()
     for idx, batch in enumerate(batches, start=1):
         if not batch:
             continue
 
-        print(f"[main] enviando bloco {idx}...")
-        send_telegram(batch)
+        checksum = hashlib.sha256(batch.encode("utf-8")).hexdigest()
+        if checksum in sent_hashes:
+            logger.warning("duplicate batch skipped", extra={"run_id": run_id, "status": "deduplicated"})
+            continue
 
+        logger.info(f"sending batch {idx}", extra={"run_id": run_id, "status": "sending"})
+        send_telegram(batch, run_id=run_id)
+        sent_hashes.add(checksum)
+
+    logger.info(f"section metrics: {metrics}", extra={"run_id": run_id, "status": "completed"})
     return structured_sections
 
 
 if __name__ == "__main__":
-    print("Starting daily economic briefing...")
+    configure_logging()
+    run_id = uuid.uuid4().hex[:10]
 
-    structured_sections = send_report_in_batches()
+    logger.info("starting daily economic briefing", extra={"run_id": run_id, "status": "started"})
+
+    structured_sections = send_report_in_batches(run_id=run_id)
 
     snapshot_path = save_daily_snapshot(structured_sections)
-    print(f"[main] snapshot salvo em {snapshot_path}")
+    logger.info(f"snapshot saved at {snapshot_path}", extra={"run_id": run_id, "status": "ok"})
 
     report_path, index_path = generate_html_report(structured_sections)
-    print(f"[main] html report salvo em {report_path}")
-    print(f"[main] index html salvo em {index_path}")
+    logger.info(f"html report saved at {report_path}", extra={"run_id": run_id, "status": "ok"})
+    logger.info(f"index saved at {index_path}", extra={"run_id": run_id, "status": "ok"})
