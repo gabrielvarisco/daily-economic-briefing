@@ -1,48 +1,67 @@
 # daily-economic-briefing
 
-Briefing diário de mercado com foco em Brasil, EUA, macro global e cripto, com saída em Telegram e relatório HTML.
+Briefing diário de mercado com foco em Brasil, EUA, macro global e cripto.
+O projeto gera:
+- mensagens para Telegram,
+- snapshot histórico em JSON,
+- relatório HTML.
 
-## Diagnóstico profissional
-Foi adicionada uma análise técnica e de produto com recomendações priorizadas em:
-- confiabilidade operacional,
-- qualidade de dados,
-- evolução analítica,
-- governança e escala.
+## Estrutura principal
+- `main.py`: pipeline completo com envio Telegram.
+- `build_site.py`: geração silenciosa de snapshot + HTML (sem envio).
+- `Scripts/pipeline.py`: orquestração central das seções.
+- `Scripts/logging_utils.py`: logging estruturado (JSON).
+- `.github/workflows/daily.yml`: execução diária no GitHub Actions.
+- `.github/workflows/tests.yml`: testes unitários no CI.
 
-Veja em: `docs/professional_improvements.md`.
+## Instalação local
+1. Criar ambiente virtual.
+2. Instalar dependências:
 
-## Roadmap em sprints
-Plano de execução incremental em: `docs/sprint_roadmap.md`.
+```bash
+pip install -r requirements.txt
+```
 
-## Instalação rápida (local)
-1. Crie e ative um ambiente virtual.
-2. Instale dependências:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Configure variáveis:
-   ```bash
-   export TELEGRAM_TOKEN="<seu_token>"
-   export CHAT_ID="<seu_chat_id>"
-   ```
-4. Execute:
-   ```bash
-   python main.py
-   ```
+3. Configurar variáveis de ambiente (Telegram):
 
-## Rodar via GitHub Actions (YAML)
-O workflow principal é `.github/workflows/daily.yml` e usa os secrets:
+```bash
+export TELEGRAM_TOKEN="<seu_token>"
+export CHAT_ID="<seu_chat_id>"
+```
+
+## Execução
+### Rodar briefing completo (com envio Telegram)
+```bash
+python main.py
+```
+
+### Rodar apenas geração de snapshot + HTML
+```bash
+python build_site.py
+```
+
+## Testes
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+## GitHub Actions
+O workflow principal usa os secrets:
 - `TELEGRAM_TOKEN`
 - `CHAT_ID`
 
-No GitHub, configure em:
+Configurar em:
 `Settings -> Secrets and variables -> Actions`.
 
-## Observações de rede (yfinance)
-Se sua rede bloquear Yahoo (proxy/403), ajuste:
-- `YF_RETRIES` (default: `3`)
-- `YF_RETRY_PAUSE` (default: `1.0`)
-- `YF_TIMEOUT` (default: `15`)
+## Variáveis úteis de operação
+### Telegram
+- `DRY_RUN_TELEGRAM=1` (não envia mensagem, só simula envio)
+- `TELEGRAM_RETRIES` (retries de envio)
+
+### Mercado (yfinance)
+- `YF_RETRIES` (default `3`)
+- `YF_RETRY_PAUSE` (default `1.0`)
+- `YF_TIMEOUT` (default `15`)
 
 Exemplo para rede restrita:
 ```bash
@@ -50,24 +69,6 @@ export YF_RETRIES=1
 export YF_TIMEOUT=8
 ```
 
-
-## Disparar workflow com GitHub CLI (opcional)
-Instalação rápida do `gh`:
-```bash
-# Ubuntu/Debian
-type -p curl >/dev/null || sudo apt install curl -y
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
-  sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
-  sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt update
-sudo apt install gh -y
-```
-
-Autenticar e disparar o workflow:
-```bash
-gh auth login
-gh workflow run daily.yml
-gh run watch
-```
+## Documentação adicional
+- Diagnóstico e melhorias: `docs/professional_improvements.md`
+- Roadmap em sprints: `docs/sprint_roadmap.md`
