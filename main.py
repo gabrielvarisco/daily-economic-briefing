@@ -16,6 +16,10 @@ logger = logging.getLogger("main")
 
 
 def send_telegram(message: str, run_id: str, retries: int = 3) -> bool:
+    if os.getenv("DRY_RUN_TELEGRAM", "0") == "1":
+        logger.info("dry-run telegram enabled", extra={"run_id": run_id, "status": "dry-run"})
+        return True
+
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("CHAT_ID")
 
@@ -30,6 +34,8 @@ def send_telegram(message: str, run_id: str, retries: int = 3) -> bool:
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
+
+    retries = max(1, int(os.getenv("TELEGRAM_RETRIES", str(retries))))
 
     for attempt in range(retries):
         try:

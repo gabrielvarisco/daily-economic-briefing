@@ -1,9 +1,12 @@
 import html
+import logging
 import re
 import requests
 import xml.etree.ElementTree as ET
 from typing import Dict, List
 
+
+logger = logging.getLogger("news_market")
 
 RSS_FEEDS = {
     "brazil": [
@@ -147,13 +150,11 @@ def _score_item(item: Dict, market: str) -> int:
         if keyword in text:
             score -= 5
 
-    # peso extra se a manchete já vier bem alinhada
     title_lower = item["title"].lower()
     for keyword in KEYWORDS.get(market, []):
         if keyword in title_lower:
             score += 2
 
-    # prioriza fontes mais fortes
     if item["domain"] in SOURCE_LABELS:
         score += 1
 
@@ -170,7 +171,7 @@ def get_market_news(market: str, limit: int = 3) -> List[Dict]:
             feed_items = _extract_items_from_rss(xml_text)
             all_items.extend(feed_items)
         except Exception as exc:
-            print(f"[news_market] erro ao ler feed {feed_url}: {exc}")
+            logger.warning(f"erro ao ler feed {feed_url}: {exc}")
 
     all_items = _deduplicate(all_items)
 
@@ -182,12 +183,10 @@ def get_market_news(market: str, limit: int = 3) -> List[Dict]:
 
     scored_items.sort(key=lambda x: x["score"], reverse=True)
 
-    # primeiro tenta só notícias realmente relevantes
     strong = [item for item in scored_items if item["score"] >= 3]
     if len(strong) >= limit:
         return strong[:limit]
 
-    # fallback mais amplo
     medium = [item for item in scored_items if item["score"] >= 1]
     if len(medium) >= limit:
         return medium[:limit]
