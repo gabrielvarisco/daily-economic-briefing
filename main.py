@@ -133,5 +133,6 @@ if __name__ == "__main__":
     snapshot_path = save_daily_snapshot(structured_sections)
     print(f"[main] snapshot salvo em {snapshot_path}")
 
-    html_path = generate_html_report(structured_sections)
-    print(f"[main] html report salvo em {html_path}")
+    report_path, index_path = generate_html_report(structured_sections)
+    print(f"[main] html report salvo em {report_path}")
+    print(f"[main] index html salvo em {index_path}")
