@@ -10,6 +10,7 @@ from Scripts.usa_market import usa_market
 from Scripts.news_market import news_market
 from Scripts.history_store import save_daily_snapshot
 from Scripts.quant_summary import quant_summary
+from Scripts.html_report import generate_html_report
 
 try:
     from Scripts.crypto_market import crypto_market
@@ -129,5 +130,8 @@ if __name__ == "__main__":
 
     structured_sections = send_report_in_batches()
 
-    filepath = save_daily_snapshot(structured_sections)
-    print(f"[main] snapshot salvo em {filepath}")
+    snapshot_path = save_daily_snapshot(structured_sections)
+    print(f"[main] snapshot salvo em {snapshot_path}")
+
+    html_path = generate_html_report(structured_sections)
+    print(f"[main] html report salvo em {html_path}")
