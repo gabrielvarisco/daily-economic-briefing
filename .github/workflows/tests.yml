@@ -2,16 +2,6 @@ name: Tests
 
 on:
   push:
-  pull_request:
-
-jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-
-name: CI Checks
-
-on:
-  push:
     branches:
       - main
   pull_request:
