@@ -7,7 +7,7 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-=======
+
 name: CI Checks
 
 on:
