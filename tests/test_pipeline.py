@@ -12,6 +12,7 @@ class PipelineTests(unittest.TestCase):
             "macro": "macro",
             "brazil": "br",
             "usa": "us",
+            "drivers": "drv",
             "crypto": "c",
             "quant": "q",
             "news": "n",
@@ -20,6 +21,7 @@ class PipelineTests(unittest.TestCase):
         batches = pipeline.build_batches(sections)
         self.assertEqual(len(batches), 3)
         self.assertIn("macro", batches[0])
+        self.assertIn("drv", batches[0])
         self.assertIn("c", batches[1])
 
     def test_build_sections_collects_metrics_with_source(self):

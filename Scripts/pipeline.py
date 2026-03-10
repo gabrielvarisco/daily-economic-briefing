@@ -9,6 +9,7 @@ from Scripts.brazil_market import brazil_market
 from Scripts.usa_market import usa_market
 from Scripts.news_market import news_market
 from Scripts.quant_summary import quant_summary
+from Scripts.drivers_of_day import drivers_of_day
 
 try:
     from Scripts.crypto_market import crypto_market
@@ -54,6 +55,7 @@ def get_section_specs() -> List[SectionSpec]:
 
     specs.extend(
         [
+            SectionSpec("drivers", "Drivers do Dia", drivers_of_day, "yfinance"),
             SectionSpec("quant", "Quant Summary", quant_summary, "yfinance"),
             SectionSpec("news", "News Market", news_market, "rss"),
         ]
@@ -145,6 +147,9 @@ def build_batches(structured_sections: Dict[str, str]) -> List[str]:
         batch_1_parts.append(structured_sections["macro"])
 
     batch_1_parts.extend([structured_sections["brazil"], structured_sections["usa"]])
+
+    if "drivers" in structured_sections:
+        batch_1_parts.append(structured_sections["drivers"])
 
     batch_2_parts = []
     if "crypto" in structured_sections:
