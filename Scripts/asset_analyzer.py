@@ -150,6 +150,27 @@ def _rolling_high_low(close: pd.Series, window: int) -> tuple[Optional[float], O
     return float(recent.max()), float(recent.min())
 
 
+
+
+def _quality_flags(result: Dict[str, Any]) -> List[str]:
+    flags: List[str] = []
+    max_daily_abs = float(os.getenv("MAX_DAILY_CHANGE_ABS", "20"))
+    max_weekly_abs = float(os.getenv("MAX_WEEKLY_CHANGE_ABS", "40"))
+
+    daily_change = result.get("daily_change")
+    weekly_change = result.get("weekly_change")
+
+    if daily_change is not None and abs(float(daily_change)) > max_daily_abs:
+        flags.append("daily_change_outlier")
+
+    if weekly_change is not None and abs(float(weekly_change)) > max_weekly_abs:
+        flags.append("weekly_change_outlier")
+
+    if result.get("high_52w") is not None and result.get("low_52w") is not None:
+        if float(result["high_52w"]) < float(result["low_52w"]):
+            flags.append("invalid_52w_range")
+
+    return flags
 def analyze_asset(
     ticker: str,
     period: str = "1y",
@@ -204,6 +225,10 @@ def analyze_asset(
     for window in ma_windows:
         result[f"ma{window}"] = _round_or_none(ma_map[window])
         result[f"ma{window}_status"] = ma_status_map[window]
+
+    quality_flags = _quality_flags(result)
+    result["quality_flags"] = quality_flags
+    result["is_suspect"] = len(quality_flags) > 0
 
     return result
 
