@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 name: Tests
 
 on:
@@ -7,6 +8,20 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+=======
+name: CI Checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+>>>>>>> 39bafce (Update CI workflows and refresh sprint roadmap)
 
     steps:
       - name: Checkout repo
@@ -24,3 +39,9 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
+<<<<<<< HEAD
+=======
+
+      - name: Smoke build (snapshot + html)
+        run: python build_site.py
+>>>>>>> 39bafce (Update CI workflows and refresh sprint roadmap)
