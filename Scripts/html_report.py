@@ -15,6 +15,7 @@ SECTION_TITLES = {
     "brazil": "🇧🇷 Brazil Market",
     "usa": "🇺🇸 USA Market",
     "crypto": "₿ Crypto Market",
+    "drivers": "🧭 Drivers do Dia",
     "quant": "📈 Quant Summary",
     "news": "📰 News Market",
 }

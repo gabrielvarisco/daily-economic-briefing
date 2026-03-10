@@ -10,6 +10,7 @@ O projeto gera:
 - `main.py`: pipeline completo com envio Telegram.
 - `build_site.py`: geração silenciosa de snapshot + HTML (sem envio).
 - `Scripts/pipeline.py`: orquestração central das seções.
+- `Scripts/drivers_of_day.py`: bloco de drivers macro/risco do dia.
 - `Scripts/logging_utils.py`: logging estruturado (JSON).
 - `.github/workflows/daily.yml`: execução diária no GitHub Actions.
 - `.github/workflows/tests.yml`: testes unitários no CI.
