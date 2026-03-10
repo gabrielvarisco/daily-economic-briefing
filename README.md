@@ -76,3 +76,19 @@ export YF_TIMEOUT=8
 
 ## Observabilidade no snapshot
 O snapshot diário inclui `schema_version`, métricas por seção (`status`, `elapsed_ms`, `source`) e `health_report` consolidado da execução.
+
+
+## Fluxo rápido para evitar conflitos na PR
+Em vez de resolver conflito arquivo por arquivo na web, rode localmente:
+
+```bash
+Scripts/sync_branch.sh main
+```
+
+Esse comando faz:
+1. `git fetch origin`
+2. `git rebase origin/main` na sua branch atual
+3. roda testes unitários
+4. `git push --force-with-lease`
+
+Se houver conflito, você resolve **uma vez localmente**, continua o rebase e roda o script de novo.
