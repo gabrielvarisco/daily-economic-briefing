@@ -37,7 +37,11 @@ def _extract_date_from_filename(filename: str, prefix: str = "snapshot") -> Opti
     return filename[len(expected_prefix):-5]
 
 
-def save_daily_snapshot(payload: Dict[str, Any], prefix: str = "snapshot") -> str:
+def save_daily_snapshot(
+    payload: Dict[str, Any],
+    prefix: str = "snapshot",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Salva ou sobrescreve o snapshot do dia atual.
     """
@@ -47,10 +51,14 @@ def save_daily_snapshot(payload: Dict[str, Any], prefix: str = "snapshot") -> st
     filepath = _snapshot_path_for_date(today, prefix=prefix)
 
     content = {
+        "schema_version": 2,
         "generated_at_utc": datetime.utcnow().isoformat(),
         "snapshot_date_utc": today,
         "data": payload,
     }
+
+    if metadata:
+        content["metadata"] = metadata
 
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(content, f, ensure_ascii=False, indent=2)
